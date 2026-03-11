@@ -412,7 +412,6 @@ ruff check src/ tests/
 | [架构概述](docs/architecture-overview.md) | 系统架构、集成模式、技术选型 |
 | [数据分类引擎](docs/data-classification-engine.md) | 敏感数据检测、聊天保护、出站检查、域名信誉 |
 | [QA 验证](docs/qa-validation.md) | 误报率分析、性能实测、Chat 保护详解、行为链检测方案 |
-| [需求规格说明书](SkillSecurity需求规格说明书.md) | 完整的产品需求文档 |
 
 ## 行为链检测
 

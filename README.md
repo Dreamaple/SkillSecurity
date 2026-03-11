@@ -387,7 +387,6 @@ ruff check src/ tests/
 | [Architecture](docs/architecture-overview.md) | System architecture, integration modes, tech stack |
 | [Data Classification](docs/data-classification-engine.md) | Sensitive data detection, outbound inspection, domain trust |
 | [QA Validation](docs/qa-validation.md) | False positive analysis, performance benchmarks, chat protection details |
-| [Requirements](SkillSecurity需求规格说明书.md) | Full product requirements specification (Chinese) |
 
 ## Behavior Chain Detection
 
