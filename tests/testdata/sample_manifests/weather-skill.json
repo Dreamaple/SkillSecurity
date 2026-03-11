@@ -1,0 +1,14 @@
+{
+  "skill_id": "acme/weather-forecast",
+  "version": "1.2.0",
+  "name": "Weather Forecast",
+  "author": "dev@acme.com",
+  "description": "Fetches weather data from public APIs",
+  "permissions": {
+    "network.read": {
+      "description": "Fetch weather data from API",
+      "domains": ["api.openweathermap.org", "wttr.in"]
+    }
+  },
+  "deny_permissions": ["shell", "file.write", "file.delete", "database.write", "env.read"]
+}

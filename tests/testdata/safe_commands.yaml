@@ -1,0 +1,47 @@
+# Safe command patterns for testing - these should all be allowed
+commands:
+  - tool: shell
+    command: "ls /tmp"
+    expected_action: allow
+  - tool: shell
+    command: "echo hello world"
+    expected_action: allow
+  - tool: shell
+    command: "cat README.md"
+    expected_action: allow
+  - tool: shell
+    command: "pwd"
+    expected_action: allow
+  - tool: shell
+    command: "python --version"
+    expected_action: allow
+  - tool: shell
+    command: "git status"
+    expected_action: allow
+  - tool: shell
+    command: "pip install requests"
+    expected_action: allow
+  - tool: shell
+    command: "npm install express"
+    expected_action: allow
+  - tool: file.read
+    path: "/home/user/project/README.md"
+    expected_action: allow
+  - tool: file.read
+    path: "./src/main.py"
+    expected_action: allow
+  - tool: file.write
+    path: "/home/user/project/output.txt"
+    expected_action: allow
+  - tool: file.write
+    path: "./data/results.json"
+    expected_action: allow
+  - tool: network.request
+    url: "https://api.github.com/repos"
+    expected_action: allow
+  - tool: shell
+    command: "dir"
+    expected_action: allow
+  - tool: shell
+    command: "type README.md"
+    expected_action: allow

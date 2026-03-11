@@ -1,0 +1,32 @@
+version: "1.0"
+name: "scan-rules"
+description: "Static analysis scan rules for Python and JavaScript/TypeScript"
+
+categories:
+  dynamic_code_execution:
+    description: "Dynamic code execution (eval, exec, compile)"
+    default_severity: critical
+  shell_execution:
+    description: "Shell/subprocess execution"
+    default_severity: high
+  data_exfiltration:
+    description: "Sending sensitive data to external services"
+    default_severity: critical
+  code_obfuscation:
+    description: "Obfuscated code execution"
+    default_severity: critical
+  reverse_shell:
+    description: "Network socket connections that may be reverse shells"
+    default_severity: critical
+  file_write:
+    description: "File system write operations"
+    default_severity: medium
+  env_access:
+    description: "Environment variable access"
+    default_severity: medium
+  deserialization:
+    description: "Unsafe deserialization"
+    default_severity: high
+  dynamic_import:
+    description: "Dynamic module loading"
+    default_severity: high

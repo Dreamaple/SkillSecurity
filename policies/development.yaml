@@ -1,0 +1,43 @@
+version: "1.0"
+name: "development"
+description: "Development policy — relaxed for local development, still catches critical risks"
+
+global:
+  default_action: allow
+  log_level: debug
+  fail_behavior: block
+
+rules:
+  - id: "block-recursive-delete"
+    tool_type: shell
+    match:
+      command_pattern: "rm\\s+.*(-[a-zA-Z]*r|--recursive)"
+    action: block
+    severity: critical
+    message: "Recursive deletion blocked even in development mode"
+    suggestions:
+      - "Use precise file paths"
+
+  - id: "block-disk-operations"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)(\\bdd\\s+if=|\\bmkfs\\.|\\bfdisk\\b|\\bparted\\b|\\bformat\\s+[a-zA-Z]:)"
+    action: block
+    severity: critical
+    message: "Disk operations blocked even in development mode"
+
+  - id: "block-reverse-shell"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)(nc\\s+.*-e|ncat\\s+.*-e|/dev/tcp/|bash\\s+-i\\s+>&)"
+    action: block
+    severity: critical
+    message: "Reverse shell blocked"
+
+  - id: "warn-privilege-escalation"
+    tool_type: shell
+    match:
+      command_pattern: "^(sudo|runas)\\s"
+    action: ask
+    severity: medium
+    message: "Privilege escalation — confirm in dev mode"

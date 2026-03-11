@@ -11,8 +11,10 @@ SkillSecurity/
 ├── SkillSecurity需求规格说明书.md     ← 主文档（总览）
 └── docs/
     ├── README.md                     ← 本文件（索引）
-    ├── threat-model.md               ← 威胁模型
+    ├── how-it-works.md               ← 设计原理与集成指南
+    ├── threat-model.md               ← 威胁模型（八类威胁）
     ├── architecture-overview.md      ← 架构概述
+    ├── data-classification-engine.md ← 数据分类与隐私保护层
     ├── phase-1-core-interception.md  ← Phase 1: 核心拦截引擎
     ├── phase-2-permission-and-audit.md ← Phase 2: 权限声明与审计
     ├── phase-3-sdk-and-ecosystem.md  ← Phase 3: 多框架 SDK 与生态
@@ -28,9 +30,11 @@ SkillSecurity/
 
 | 顺序 | 文档 | 内容 | 阅读时间 |
 |---|---|---|---|
-| 1 | [主需求文档](../SkillSecurity需求规格说明书.md) | 产品愿景、目标用户、功能总览、成功指标 | 10 分钟 |
-| 2 | [威胁模型](threat-model.md) | 四类威胁分析、防御策略、风险评级 | 8 分钟 |
-| 3 | [架构概述](architecture-overview.md) | 系统架构、集成模式、技术选型、部署方案 | 10 分钟 |
+| 1 | [设计原理](how-it-works.md) | 工作原理、拦截机制、Agent 集成、自定义配置 | 12 分钟 |
+| 2 | [主需求文档](../SkillSecurity需求规格说明书.md) | 产品愿景、目标用户、功能总览、成功指标 | 10 分钟 |
+| 3 | [威胁模型](threat-model.md) | 八类威胁分析、防御策略、风险评级 | 10 分钟 |
+| 4 | [架构概述](architecture-overview.md) | 系统架构、集成模式、技术选型、部署方案 | 10 分钟 |
+| 5 | [数据分类引擎](data-classification-engine.md) | 敏感数据检测、聊天保护、出站检查、域名信誉 | 8 分钟 |
 
 ### 按阶段实施（开发时按需阅读）
 
@@ -87,5 +91,7 @@ SkillSecurity/
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v0.4.0 | 2026-03-11 | 新增聊天记录保护、设计原理文档、开源准备 |
+| v0.3.0 | 2026-03-11 | 新增隐私保护、财务安全、数据分类引擎 |
 | v0.2.0 | 2026-03-11 | 重构文档结构，增加威胁模型、架构概述，按阶段拆分需求 |
 | v0.1.0 | 2026-03-11 | 初始需求文档 |

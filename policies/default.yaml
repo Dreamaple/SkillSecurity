@@ -1,0 +1,198 @@
+version: "1.0"
+name: "default"
+description: "Default security policy — balanced safety and usability"
+
+global:
+  default_action: allow
+  log_level: info
+  fail_behavior: block
+
+rules:
+  # ──────────────── Recursive Deletion ────────────────
+  # Catch on all platforms (WSL/Git Bash on Windows can run Unix commands)
+
+  - id: "block-recursive-delete-unix"
+    tool_type: shell
+    match:
+      command_pattern: "rm\\s+.*(-[a-zA-Z]*r|--recursive)"
+    action: block
+    severity: critical
+    message: "Recursive deletion detected"
+    suggestions:
+      - "Use a precise file path instead"
+      - "List files first with: ls <path>"
+
+  - id: "block-recursive-delete-windows"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)(del\\s+/s|rd\\s+/s|rmdir\\s+/s)"
+    action: block
+    severity: critical
+    message: "Recursive deletion detected"
+    suggestions:
+      - "Use a precise file path instead"
+      - "List files first with: dir <path>"
+
+  # ──────────────── Remote Code Execution ────────────────
+
+  - id: "block-pipe-to-shell"
+    tool_type: shell
+    match:
+      command_pattern: "(curl|wget)\\s+.*\\|\\s*(bash|sh|zsh|dash)"
+    action: block
+    severity: critical
+    message: "Remote code execution via pipe to shell"
+    suggestions:
+      - "Download the script first, review it, then execute"
+
+  - id: "block-powershell-download-exec"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)powershell\\s+.*(-exec\\s*bypass|iex|invoke-expression|downloadstring|downloadfile)"
+    action: block
+    severity: critical
+    message: "PowerShell remote code execution detected"
+    suggestions:
+      - "Download and review the script before executing"
+
+  # ──────────────── Disk Operations ────────────────
+
+  - id: "block-disk-operations-unix"
+    tool_type: shell
+    match:
+      command_pattern: "(\\bdd\\s+if=|\\bmkfs\\.|\\bfdisk\\b|\\bparted\\b)"
+    action: block
+    severity: critical
+    message: "Disk-level operation detected"
+    suggestions:
+      - "Disk operations are extremely dangerous and can cause data loss"
+
+  - id: "block-disk-operations-windows"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)\\b(format\\s+[a-zA-Z]:|diskpart)\\b"
+    action: block
+    severity: critical
+    message: "Disk-level operation detected"
+    suggestions:
+      - "Disk operations are extremely dangerous and can cause data loss"
+
+  # ──────────────── Privilege Escalation ────────────────
+
+  - id: "ask-privilege-escalation-unix"
+    tool_type: shell
+    match:
+      command_pattern: "^sudo\\s"
+    action: ask
+    severity: high
+    message: "Privilege escalation operation"
+    suggestions:
+      - "Consider whether elevated privileges are truly needed"
+
+  - id: "ask-privilege-escalation-windows"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)^runas\\s"
+    action: ask
+    severity: high
+    message: "Privilege escalation operation"
+
+  # ──────────────── System Paths ────────────────
+
+  - id: "block-system-paths-unix"
+    tool_type:
+      - file.write
+      - file.delete
+    match:
+      path_pattern: "^(/etc|/System|/boot|/sbin|/usr/sbin)"
+    action: block
+    severity: critical
+    message: "System directory modification blocked"
+    suggestions:
+      - "Do not modify system directories directly"
+      - "Use package managers for system-level changes"
+
+  - id: "block-system-paths-windows"
+    tool_type:
+      - file.write
+      - file.delete
+    match:
+      path_pattern: "(?i)^(C:\\\\Windows|C:\\\\Program Files)"
+    action: block
+    severity: critical
+    message: "System directory modification blocked"
+    suggestions:
+      - "Do not modify Windows system directories directly"
+
+  # ──────────────── Credential Files ────────────────
+
+  - id: "block-credential-files"
+    tool_type:
+      - file.write
+      - file.delete
+      - file.read
+    match:
+      path_pattern: "(\\.ssh/|(\\.env$)|/\\.aws/|/\\.gnupg/|credential|/\\.netrc)"
+    action: ask
+    severity: high
+    message: "Access to credential or secret file detected"
+    suggestions:
+      - "Be cautious with credential files"
+      - "Consider using a secrets manager instead"
+
+  # ──────────────── Chat History Files ────────────────
+
+  - id: "ask-chat-history-files"
+    tool_type:
+      - file.read
+      - file.write
+      - file.delete
+    match:
+      path_pattern: "(?i)(chat[_\\-]?history|conversations?\\.(?:json|db|sqlite|jsonl)|chat[_\\-]?log|message[_\\-]?log|dialog(?:ue)?s?\\.(?:json|db)|chat[_\\-]?export|chat[_\\-]?backup|thread[_\\-]?history|chat[_\\-]?archive|\\.chathistory|\\.chat_sessions)"
+    action: ask
+    severity: high
+    message: "Access to chat history or conversation data detected"
+    suggestions:
+      - "Chat history contains private conversation data"
+      - "Verify this Skill genuinely needs access to chat records"
+      - "Consider limiting access to specific conversations only"
+
+  - id: "ask-chat-app-data"
+    tool_type:
+      - file.read
+      - file.write
+      - file.delete
+    match:
+      path_pattern: "(?i)(\\.telegram|\\.signal|\\.whatsapp|\\.wechat|\\.slack|\\.discord|\\.teams|Library/Messages|AppData.*(Telegram|Signal|WhatsApp|WeChat|Slack|Discord))"
+    action: ask
+    severity: high
+    message: "Access to chat application data directory detected"
+    suggestions:
+      - "This path belongs to a messaging application"
+      - "Chat app data contains private conversations and media"
+      - "Only allow if this Skill specifically requires chat app integration"
+
+  # ──────────────── Sensitive Data in Commands ────────────────
+
+  - id: "block-sensitive-data-in-params"
+    tool_type: shell
+    match:
+      param_pattern: "(?i)(password|passwd|token|api_key|secret|bearer\\s+[a-zA-Z0-9._\\-]+|sk-[a-zA-Z0-9]{10,})"
+    action: block
+    severity: high
+    message: "Sensitive data detected in command parameters"
+    suggestions:
+      - "Use environment variables or config files for secrets"
+      - "Never embed secrets directly in commands"
+
+  # ──────────────── Reverse Shells ────────────────
+
+  - id: "block-reverse-shell"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)(nc\\s+.*-e|ncat\\s+.*-e|/dev/tcp/|bash\\s+-i\\s+>&|python.*socket.*connect)"
+    action: block
+    severity: critical
+    message: "Reverse shell attempt detected"
+    suggestions:
+      - "Reverse shells are a critical security risk"

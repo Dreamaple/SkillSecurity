@@ -1,0 +1,42 @@
+version: "1.0"
+name: "strict"
+description: "Strict security policy — maximum protection for production environments"
+
+global:
+  default_action: block
+  log_level: info
+  fail_behavior: block
+
+rules:
+  - id: "allow-read-only"
+    tool_type: file.read
+    action: allow
+    severity: low
+    message: "File reads are allowed in strict mode"
+
+  - id: "allow-safe-shell"
+    tool_type: shell
+    match:
+      command_pattern: "^(ls|dir|pwd|echo|cat|type|head|tail|wc|date|whoami|hostname|uname)\\b"
+    action: allow
+    severity: low
+
+  - id: "ask-all-writes"
+    tool_type:
+      - file.write
+      - file.delete
+    action: ask
+    severity: high
+    message: "All file modifications require confirmation in strict mode"
+
+  - id: "ask-all-network"
+    tool_type: network.request
+    action: ask
+    severity: medium
+    message: "All network requests require confirmation in strict mode"
+
+  - id: "ask-all-shell"
+    tool_type: shell
+    action: ask
+    severity: medium
+    message: "Shell command requires confirmation in strict mode"

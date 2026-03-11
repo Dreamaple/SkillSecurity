@@ -1,0 +1,312 @@
+"""CLI entry point for SkillSecurity."""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import click
+
+from skillsecurity import PolicyLoadError, SkillGuard
+from skillsecurity.cli.formatter import DecisionFormatter
+from skillsecurity.cli.prompter import AskPrompter
+from skillsecurity.config.defaults import BUILTIN_POLICIES_DIR
+
+
+@click.group()
+@click.option("--policy", "-p", default=None, help="Policy template name or file path")
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    default="human",
+    type=click.Choice(["human", "json"]),
+    help="Output format",
+)
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed info including allow decisions")
+@click.option("--no-color", is_flag=True, help="Disable colored output")
+@click.option("--no-emoji", is_flag=True, help="Disable emoji in output")
+@click.option("--lang", default="en", type=click.Choice(["en", "zh"]), help="Output language")
+@click.option("--config", "-c", default=None, help="Configuration file path")
+@click.pass_context
+def cli(
+    ctx: click.Context,
+    policy: str | None,
+    output_format: str,
+    verbose: bool,
+    no_color: bool,
+    no_emoji: bool,
+    lang: str,
+    config: str | None,
+) -> None:
+    """SkillSecurity — AI Agent tool call security protection."""
+    ctx.ensure_object(dict)
+    ctx.obj["policy"] = policy
+    ctx.obj["format"] = output_format
+    ctx.obj["verbose"] = verbose
+    ctx.obj["formatter"] = DecisionFormatter(
+        use_color=not no_color and sys.stderr.isatty(),
+        use_emoji=not no_emoji,
+        lang=lang,
+    )
+    ctx.obj["config"] = config
+
+
+def _make_guard(ctx: click.Context) -> SkillGuard:
+    policy = ctx.obj.get("policy")
+    config_path = ctx.obj.get("config")
+
+    if config_path:
+        return SkillGuard(policy_file=config_path)
+    if policy:
+        policy_path = Path(policy)
+        if policy_path.exists():
+            return SkillGuard(policy_file=str(policy_path))
+        return SkillGuard(policy=policy)
+    return SkillGuard()
+
+
+@cli.command()
+@click.option("--tool", "-t", required=False, help="Tool type (shell, file.read, file.write, etc.)")
+@click.option("--command", required=False, help="Command string (for shell tool)")
+@click.option("--path", required=False, help="File path (for file tools)")
+@click.option("--url", required=False, help="URL (for network tools)")
+@click.option("--json-input", "--json", "json_mode", is_flag=True, help="Read JSON from stdin")
+@click.pass_context
+def check(
+    ctx: click.Context,
+    tool: str | None,
+    command: str | None,
+    path: str | None,
+    url: str | None,
+    json_mode: bool,
+) -> None:
+    """Check a tool call against security policies."""
+    formatter: DecisionFormatter = ctx.obj["formatter"]
+    output_format: str = ctx.obj["format"]
+
+    if json_mode:
+        raw = sys.stdin.read()
+        try:
+            tool_call = json.loads(raw)
+        except json.JSONDecodeError as e:
+            click.echo(f"Invalid JSON input: {e}", err=True)
+            ctx.exit(3)
+            return
+    else:
+        if not tool:
+            click.echo("Error: --tool is required (or use --json for JSON input)", err=True)
+            ctx.exit(3)
+            return
+        tool_call: dict[str, Any] = {"tool": tool}
+        if command:
+            tool_call["command"] = command
+        if path:
+            tool_call["path"] = path
+        if url:
+            tool_call["url"] = url
+
+    try:
+        guard = _make_guard(ctx)
+        decision = guard.check(tool_call)
+    except PolicyLoadError as e:
+        click.echo(f"Policy error: {e}", err=True)
+        ctx.exit(3)
+        return
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        ctx.exit(3)
+        return
+
+    if output_format == "json":
+        click.echo(formatter.format_json(decision))
+    else:
+        click.echo(formatter.format_human(decision, tool_call), err=True)
+        if output_format == "human":
+            click.echo(json.dumps(decision.to_dict(), ensure_ascii=False))
+
+    if decision.is_blocked:
+        ctx.exit(1)
+    elif decision.needs_confirmation:
+        prompter = AskPrompter()
+        if sys.stdin.isatty():
+            allowed = prompter.prompt(
+                message=f"Risk: {decision.severity.value} — {decision.reason}",
+                severity=decision.severity.value,
+            )
+            ctx.exit(0 if allowed else 1)
+        else:
+            ctx.exit(2)
+    else:
+        ctx.exit(0)
+
+
+@cli.command()
+@click.option(
+    "--template",
+    default="default",
+    type=click.Choice(["default", "strict", "development"]),
+    help="Policy template to use",
+)
+@click.option("--output", "-o", default="./skillsecurity.yaml", help="Output file path")
+def init(template: str, output: str) -> None:
+    """Initialize a new security policy configuration file."""
+    source = BUILTIN_POLICIES_DIR / f"{template}.yaml"
+    if not source.exists():
+        click.echo(f"Template '{template}' not found", err=True)
+        raise SystemExit(3)
+
+    dest = Path(output)
+    if dest.exists():
+        click.echo(f"File already exists: {dest}", err=True)
+        raise SystemExit(3)
+
+    dest.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    click.echo(f"Created {dest} from '{template}' template")
+
+
+@cli.command()
+@click.argument("manifest_path", type=click.Path(exists=True))
+@click.pass_context
+def register(ctx: click.Context, manifest_path: str) -> None:
+    """Register a Skill permission manifest."""
+    from skillsecurity.manifest.parser import ManifestParser, ManifestValidationError
+
+    try:
+        manifest = ManifestParser.parse_file(manifest_path)
+        click.echo(f"Registered Skill: {manifest.skill_id}")
+        click.echo(f"  Name: {manifest.name}")
+        click.echo(f"  Version: {manifest.version}")
+        click.echo(f"  Permissions: {', '.join(manifest.permissions.keys()) or 'none'}")
+        if manifest.deny_permissions:
+            click.echo(f"  Denied: {', '.join(manifest.deny_permissions)}")
+    except ManifestValidationError as e:
+        click.echo(f"Invalid manifest: {e}", err=True)
+        ctx.exit(3)
+
+
+@cli.command("log")
+@click.option("--action", type=click.Choice(["allow", "block", "ask"]), help="Filter by action")
+@click.option(
+    "--severity",
+    type=click.Choice(["low", "medium", "high", "critical"]),
+    help="Filter by severity",
+)
+@click.option("--agent-id", help="Filter by agent ID")
+@click.option("--since", help="Start date (ISO format)")
+@click.option("--until", help="End date (ISO format)")
+@click.option("--limit", default=100, help="Max results")
+@click.option("--log-path", default="./logs/skillsecurity-audit.jsonl", help="Log file path")
+@click.pass_context
+def log_cmd(
+    ctx: click.Context,
+    action: str | None,
+    severity: str | None,
+    agent_id: str | None,
+    since: str | None,
+    until: str | None,
+    limit: int,
+    log_path: str,
+) -> None:
+    """Query audit logs."""
+    from skillsecurity.audit.query import AuditQuery
+
+    q = AuditQuery(log_path)
+    results = q.query(
+        action=action, severity=severity, agent_id=agent_id, since=since, until=until, limit=limit
+    )
+    output_format = ctx.obj["format"]
+    if output_format == "json":
+        click.echo(json.dumps(results, indent=2, ensure_ascii=False))
+    else:
+        if not results:
+            click.echo("No log entries found.")
+            return
+        for entry in results:
+            ts = entry.get("timestamp", "")[:19]
+            decision = entry.get("decision", {})
+            act = decision.get("action", "?")
+            reason = decision.get("reason", "")[:60]
+            click.echo(f"{ts}  {act:6s}  {reason}")
+
+
+@cli.command()
+@click.argument("skill_path", type=click.Path(exists=True))
+@click.option(
+    "--manifest",
+    "-m",
+    default=None,
+    type=click.Path(exists=True),
+    help="Skill manifest file for permission analysis",
+)
+@click.pass_context
+def scan(ctx: click.Context, skill_path: str, manifest: str | None) -> None:
+    """Scan a Skill directory for dangerous code patterns."""
+    output_format = ctx.obj["format"]
+    try:
+        guard = _make_guard(ctx)
+        report = guard.scan_skill(skill_path, manifest=manifest)
+    except Exception as e:
+        click.echo(f"Scan error: {e}", err=True)
+        ctx.exit(3)
+        return
+    if output_format == "json":
+        click.echo(json.dumps(report, indent=2, ensure_ascii=False))
+    else:
+        risk = report["risk_level"]
+        summary = report["summary"]
+        click.echo(f"\nScan Results: {skill_path}")
+        click.echo(f"  Risk Level: {risk.upper()}")
+        click.echo(f"  Files scanned: {summary['total_files']}")
+        click.echo(
+            f"  Issues: {summary['total_issues']} (critical: {summary['critical']}, high: {summary['high']}, medium: {summary['medium']}, low: {summary['low']})"
+        )
+        if report.get("permission_analysis"):
+            pa = report["permission_analysis"]
+            if pa["undeclared"]:
+                click.echo(f"  Undeclared permissions: {', '.join(pa['undeclared'])}")
+            if pa["unused"]:
+                click.echo(f"  Unused declared permissions: {', '.join(pa['unused'])}")
+        if report["recommendation"]:
+            click.echo(f"\n  {report['recommendation']}")
+        for issue in report["issues"]:
+            click.echo(f"\n  [{issue['severity'].upper()}] {issue['file']}:{issue['line']}")
+            click.echo(f"    {issue['description']}")
+            if issue.get("code_snippet"):
+                click.echo(f"    > {issue['code_snippet']}")
+    risk = report["risk_level"]
+    if risk in ("critical", "high"):
+        ctx.exit(1)
+    elif risk == "medium":
+        ctx.exit(2)
+    else:
+        ctx.exit(0)
+
+
+@cli.command()
+@click.argument("policy_file", type=click.Path(exists=True))
+def validate(policy_file: str) -> None:
+    """Validate a security policy file."""
+    try:
+        from skillsecurity.config.loader import validate_policy_file
+
+        warnings = validate_policy_file(policy_file)
+
+        from skillsecurity.engine.policy import PolicyEngine
+
+        engine = PolicyEngine()
+        engine.load_file(policy_file)
+
+        click.echo(f"Policy file valid: {policy_file}")
+        click.echo(f"  Rules: {len(engine.rules)}")
+        click.echo(f"  Version: {engine.global_config.default_action}")
+
+        for w in warnings:
+            click.echo(f"  Warning: {w}", err=True)
+
+    except PolicyLoadError as e:
+        click.echo(f"Policy file invalid: {policy_file}", err=True)
+        click.echo(f"  Error: {e}", err=True)
+        raise SystemExit(3) from e
