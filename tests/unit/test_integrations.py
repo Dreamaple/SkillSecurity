@@ -33,6 +33,24 @@ class TestRegistry:
     def test_installed_frameworks_empty(self) -> None:
         assert isinstance(installed_frameworks(), list)
 
+    def test_install_unknown_raises(self) -> None:
+        from skillsecurity.integrations import install
+
+        with pytest.raises(ValueError, match="Unknown framework"):
+            install("nonexistent")
+
+    def test_uninstall_unknown_raises(self) -> None:
+        from skillsecurity.integrations import uninstall
+
+        with pytest.raises(ValueError, match="Unknown framework"):
+            uninstall("nonexistent")
+
+    def test_uninstall_all_noop(self) -> None:
+        from skillsecurity.integrations import uninstall_all
+
+        uninstall_all()
+        assert installed_frameworks() == []
+
 
 class TestBaseHelper:
     def test_get_or_create_guard_default(self) -> None:

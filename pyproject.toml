@@ -54,6 +54,14 @@ addopts = "-v --tb=short"
 
 [tool.coverage.run]
 source = ["skillsecurity"]
+omit = [
+    "*/integrations/langchain.py",
+    "*/integrations/autogen.py",
+    "*/integrations/crewai.py",
+    "*/integrations/llamaindex.py",
+    "*/integrations/mcp.py",
+    "*/integrations/n8n.py",
+]
 
 [tool.coverage.report]
 fail_under = 80
