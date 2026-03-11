@@ -8,7 +8,7 @@
     <a href="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml"><img src="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue" alt="Python">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
-    <img src="https://img.shields.io/badge/tests-317%20passed-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-327%20passed-brightgreen" alt="Tests">
   </p>
   <p align="center">
     <a href="README_zh.md">中文文档</a> · <a href="docs/how-it-works.md">Design Principles</a> · <a href="docs/threat-model.md">Threat Model</a>
@@ -18,6 +18,27 @@
 ---
 
 **SkillSecurity** is a runtime security layer for AI Agent tool calls — think of it as a **firewall** for AI Skills. It intercepts, evaluates, and controls every tool invocation an AI agent makes, preventing dangerous operations before they execute.
+
+## One Command. Zero Code Change.
+
+```bash
+pip install skillsecurity
+skillsecurity protect langchain    # Done. All tools are now guarded.
+```
+
+That's it. No code changes, no decorator, no wrapper. Every tool call in your LangChain / MCP / CrewAI / AutoGen agent is now inspected in real-time.
+
+```bash
+skillsecurity protect mcp          # Protect MCP/OpenClaw tools
+skillsecurity protect crewai       # Protect CrewAI tools
+skillsecurity protect autogen      # Protect AutoGen tools
+skillsecurity protect llamaindex   # Protect LlamaIndex tools
+skillsecurity protect n8n          # Start n8n security gateway
+
+skillsecurity status               # See what's protected
+skillsecurity unprotect langchain  # Cleanly remove, restore original
+skillsecurity unprotect all        # Remove everything
+```
 
 ## The Problem
 

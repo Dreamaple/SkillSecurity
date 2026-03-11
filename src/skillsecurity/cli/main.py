@@ -285,6 +285,178 @@ def scan(ctx: click.Context, skill_path: str, manifest: str | None) -> None:
         ctx.exit(0)
 
 
+_SUPPORTED_FRAMEWORKS = ["langchain", "autogen", "crewai", "llamaindex", "mcp", "n8n"]
+_CONFIG_FILE = ".skillsecurity.yaml"
+_PTH_FILE_NAME = "skillsecurity-autoprotect.pth"
+
+
+def _get_site_packages() -> Path:
+    import site
+
+    paths = site.getsitepackages()
+    for p in paths:
+        pp = Path(p)
+        if pp.exists():
+            return pp
+    user_site = site.getusersitepackages()
+    if user_site:
+        Path(user_site).mkdir(parents=True, exist_ok=True)
+        return Path(user_site)
+    raise click.ClickException("Cannot locate site-packages directory")
+
+
+def _install_pth_hook() -> Path:
+    sp = _get_site_packages()
+    pth = sp / _PTH_FILE_NAME
+    if not pth.exists():
+        pth.write_text("import skillsecurity.startup\n", encoding="utf-8")
+    return pth
+
+
+def _remove_pth_hook() -> None:
+    sp = _get_site_packages()
+    pth = sp / _PTH_FILE_NAME
+    if pth.exists():
+        pth.unlink()
+
+
+def _read_config() -> dict:
+    p = Path(_CONFIG_FILE)
+    if not p.exists():
+        return {}
+    import yaml
+
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
+def _write_config(data: dict) -> None:
+    import yaml
+
+    Path(_CONFIG_FILE).write_text(
+        yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
+@cli.command("protect")
+@click.argument("framework", type=click.Choice(_SUPPORTED_FRAMEWORKS, case_sensitive=False))
+@click.option("--policy", "-p", default=None, help="Policy template name or file")
+def protect_cmd(framework: str, policy: str | None) -> None:
+    """Enable SkillSecurity protection for a framework (zero code change).
+
+    \b
+    Examples:
+        skillsecurity protect langchain
+        skillsecurity protect mcp --policy strict
+        skillsecurity protect crewai -p ./my-policy.yaml
+
+    After running this command, all tool calls in the framework will be
+    automatically checked by SkillSecurity. No code changes needed.
+    """
+    config = _read_config()
+    protected = config.get("auto_protect", [])
+
+    fw = framework.lower()
+    if fw not in protected:
+        protected.append(fw)
+    config["auto_protect"] = protected
+
+    if policy:
+        if Path(policy).exists():
+            config["policy_file"] = str(Path(policy).resolve())
+        else:
+            config["policy"] = policy
+
+    _write_config(config)
+
+    try:
+        _install_pth_hook()
+        click.echo(f"  {fw} is now protected by SkillSecurity.")
+        click.echo()
+        click.echo(f"  Config written to {_CONFIG_FILE}")
+        click.echo("  Auto-protect hook installed in site-packages.")
+        click.echo()
+        click.echo(
+            f"  All Python programs in this environment will now auto-protect {fw} on startup."
+        )
+        click.echo()
+        click.echo(f"  To undo:  skillsecurity unprotect {fw}")
+    except Exception as e:
+        click.echo(f"  {fw} config saved to {_CONFIG_FILE}.")
+        click.echo(f"  Could not install auto-hook ({e}).")
+        click.echo("  Manual fallback: add `import skillsecurity.startup` to your entry point.")
+
+
+@cli.command("unprotect")
+@click.argument(
+    "framework",
+    type=click.Choice([*_SUPPORTED_FRAMEWORKS, "all"], case_sensitive=False),
+)
+def unprotect_cmd(framework: str) -> None:
+    """Remove SkillSecurity protection from a framework.
+
+    \b
+    Examples:
+        skillsecurity unprotect langchain
+        skillsecurity unprotect all
+    """
+    config = _read_config()
+    protected = config.get("auto_protect", [])
+
+    fw = framework.lower()
+    if fw == "all":
+        config["auto_protect"] = []
+        _remove_pth_hook()
+        config_path = Path(_CONFIG_FILE)
+        if config_path.exists():
+            config_path.unlink()
+        click.echo("  All frameworks unprotected.")
+        click.echo(f"  Removed {_CONFIG_FILE} and auto-protect hook.")
+    else:
+        if fw in protected:
+            protected.remove(fw)
+        config["auto_protect"] = protected
+
+        if protected:
+            _write_config(config)
+            click.echo(f"  {fw} unprotected. Still protecting: {', '.join(protected)}")
+        else:
+            _remove_pth_hook()
+            config_path = Path(_CONFIG_FILE)
+            if config_path.exists():
+                config_path.unlink()
+            click.echo(f"  {fw} unprotected. No frameworks left — hook removed.")
+
+
+@cli.command("status")
+def status_cmd() -> None:
+    """Show current SkillSecurity protection status.
+
+    \b
+    Example:
+        skillsecurity status
+    """
+    config = _read_config()
+    protected = config.get("auto_protect", [])
+
+    if not protected:
+        click.echo("  No frameworks currently protected.")
+        click.echo()
+        click.echo("  Get started:  skillsecurity protect langchain")
+        return
+
+    click.echo(f"  Protected frameworks: {', '.join(protected)}")
+
+    policy = config.get("policy_file") or config.get("policy") or "default"
+    click.echo(f"  Policy: {policy}")
+
+    sp = _get_site_packages()
+    pth = sp / _PTH_FILE_NAME
+    hook_status = "installed" if pth.exists() else "not installed"
+    click.echo(f"  Auto-protect hook: {hook_status}")
+
+
 @cli.command()
 @click.argument("policy_file", type=click.Path(exists=True))
 def validate(policy_file: str) -> None:
