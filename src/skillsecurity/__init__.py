@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from skillsecurity.config.defaults import BUILTIN_POLICIES_DIR
+from skillsecurity.engine.chain import ChainRule, ChainTracker
 from skillsecurity.engine.decision import DecisionEngine
 from skillsecurity.engine.interceptor import Interceptor
 from skillsecurity.engine.policy import PolicyEngine, PolicyLoadError
@@ -27,14 +28,42 @@ class SkillSecurityError(Exception):
     """Base exception for SkillSecurity errors."""
 
 
-# Re-export PolicyLoadError at package level
+def protect(framework: str, **kwargs: Any) -> None:
+    """One-liner: install SkillSecurity into a framework.
+
+    Usage:
+        import skillsecurity
+        skillsecurity.protect("langchain")
+        skillsecurity.protect("mcp", policy_file="strict.yaml")
+    """
+    from skillsecurity.integrations import install
+
+    install(framework, **kwargs)
+
+
+def unprotect(framework: str) -> None:
+    """Remove SkillSecurity protection from a framework.
+
+    Usage:
+        import skillsecurity
+        skillsecurity.unprotect("langchain")
+    """
+    from skillsecurity.integrations import uninstall
+
+    uninstall(framework)
+
+
 __all__ = [
+    "ChainRule",
+    "ChainTracker",
     "Decision",
     "ManifestParser",
     "ManifestValidationError",
     "PolicyLoadError",
     "SkillGuard",
     "SkillSecurityError",
+    "protect",
+    "unprotect",
 ]
 
 
@@ -70,6 +99,7 @@ class SkillGuard:
         self._audit_logger = audit_logger
 
         outbound_inspector = self._setup_privacy(config)
+        chain_tracker = self._setup_chain_detection(config)
 
         self._interceptor = Interceptor(
             policy_engine=self._policy_engine,
@@ -77,6 +107,7 @@ class SkillGuard:
             self_protection=self._self_protection,
             audit_logger=audit_logger,
             outbound_inspector=outbound_inspector,
+            chain_tracker=chain_tracker,
         )
 
         self._setup_self_protection()
@@ -242,6 +273,23 @@ class SkillGuard:
             classifier=classifier,
             domain_intel=domain_intel,
             financial_detector=financial,
+        )
+
+    def _setup_chain_detection(self, config: dict | None) -> ChainTracker | None:
+        """Create ChainTracker for behavior chain detection, enabled by default."""
+        chain_cfg = (config or {}).get("chain_detection", {})
+        enabled = chain_cfg.get("enabled", True)
+        if not enabled:
+            return None
+
+        extra_rules: list[ChainRule] = []
+        for rule_dict in chain_cfg.get("rules", []):
+            extra_rules.append(ChainRule.from_dict(rule_dict))
+
+        return ChainTracker(
+            chain_rules=extra_rules,
+            builtin_rules=chain_cfg.get("builtin_rules", True),
+            max_history=chain_cfg.get("max_history", 200),
         )
 
     def _get_audit_config(self, config: dict | None, policy_file: str | None) -> dict:

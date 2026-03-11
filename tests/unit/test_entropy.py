@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from skillsecurity.privacy.entropy import (
     extract_high_entropy_tokens,
     is_likely_secret,

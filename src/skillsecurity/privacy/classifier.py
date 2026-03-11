@@ -77,31 +77,35 @@ class DataClassifier:
 
         if self._secret_detector:
             for sm in self._secret_detector.scan(text):
-                result.matches.append(SensitiveMatch(
-                    type=sm.pattern_id,
-                    name=sm.name,
-                    severity=sm.severity,
-                    value_preview=sm.redacted_value,
-                    field_path=field_path,
-                    confidence=0.99,
-                    start=sm.start,
-                    end=sm.end,
-                ))
+                result.matches.append(
+                    SensitiveMatch(
+                        type=sm.pattern_id,
+                        name=sm.name,
+                        severity=sm.severity,
+                        value_preview=sm.redacted_value,
+                        field_path=field_path,
+                        confidence=0.99,
+                        start=sm.start,
+                        end=sm.end,
+                    )
+                )
 
         if self._pii_detector:
             seen_ranges: set[tuple[int, int]] = {(m.start, m.end) for m in result.matches}
             for pm in self._pii_detector.scan(text):
                 if (pm.start, pm.end) not in seen_ranges:
-                    result.matches.append(SensitiveMatch(
-                        type=pm.pattern_id,
-                        name=pm.name,
-                        severity=pm.severity,
-                        value_preview=pm.redacted_value,
-                        field_path=field_path,
-                        confidence=0.95,
-                        start=pm.start,
-                        end=pm.end,
-                    ))
+                    result.matches.append(
+                        SensitiveMatch(
+                            type=pm.pattern_id,
+                            name=pm.name,
+                            severity=pm.severity,
+                            value_preview=pm.redacted_value,
+                            field_path=field_path,
+                            confidence=0.95,
+                            start=pm.start,
+                            end=pm.end,
+                        )
+                    )
                     seen_ranges.add((pm.start, pm.end))
 
         if self._entropy_detection:
@@ -110,29 +114,33 @@ class DataClassifier:
                 idx = text.find(token)
                 if idx >= 0 and not any(s <= idx < e for s, e in secret_ranges):
                     preview = token[:4] + "****" + token[-4:] if len(token) > 8 else "****"
-                    result.matches.append(SensitiveMatch(
-                        type="high-entropy",
-                        name="High-entropy string (possible secret)",
-                        severity="high",
-                        value_preview=preview,
-                        field_path=field_path,
-                        confidence=0.7,
-                        start=idx,
-                        end=idx + len(token),
-                    ))
+                    result.matches.append(
+                        SensitiveMatch(
+                            type="high-entropy",
+                            name="High-entropy string (possible secret)",
+                            severity="high",
+                            value_preview=preview,
+                            field_path=field_path,
+                            confidence=0.7,
+                            start=idx,
+                            end=idx + len(token),
+                        )
+                    )
 
         if self._chat_detector:
             for cm in self._chat_detector.scan(text):
-                result.matches.append(SensitiveMatch(
-                    type=cm.pattern_id,
-                    name=cm.name,
-                    severity=cm.severity,
-                    value_preview=cm.redacted_value,
-                    field_path=field_path,
-                    confidence=0.9,
-                    start=cm.start,
-                    end=cm.end,
-                ))
+                result.matches.append(
+                    SensitiveMatch(
+                        type=cm.pattern_id,
+                        name=cm.name,
+                        severity=cm.severity,
+                        value_preview=cm.redacted_value,
+                        field_path=field_path,
+                        confidence=0.9,
+                        start=cm.start,
+                        end=cm.end,
+                    )
+                )
 
         return result
 

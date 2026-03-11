@@ -64,19 +64,13 @@ class TestChatDetectorStructure:
         assert len(matches) == 0
 
     def test_bulk_escalates_severity(self, detector: ChatDetector) -> None:
-        msgs = ", ".join(
-            f'{{"role": "user", "content": "msg {i}"}}'
-            for i in range(10)
-        )
+        msgs = ", ".join(f'{{"role": "user", "content": "msg {i}"}}' for i in range(10))
         text = f'{{"messages": [{msgs}]}}'
         matches = detector.scan(text)
         assert any(m.severity == "critical" for m in matches)
 
     def test_message_count_tracked(self, detector: ChatDetector) -> None:
-        msgs = ", ".join(
-            f'{{"role": "user", "content": "msg {i}"}}'
-            for i in range(7)
-        )
+        msgs = ", ".join(f'{{"role": "user", "content": "msg {i}"}}' for i in range(7))
         text = f'{{"messages": [{msgs}]}}'
         matches = detector.scan(text)
         assert any(m.message_count >= 7 for m in matches)
@@ -148,20 +142,14 @@ class TestChatDetectorConfig:
 
     def test_custom_bulk_threshold(self) -> None:
         detector = ChatDetector(bulk_threshold=3)
-        msgs = ", ".join(
-            f'{{"role": "user", "content": "msg {i}"}}'
-            for i in range(4)
-        )
+        msgs = ", ".join(f'{{"role": "user", "content": "msg {i}"}}' for i in range(4))
         text = f'{{"messages": [{msgs}]}}'
         matches = detector.scan(text)
         assert any(m.severity == "critical" for m in matches)
 
     def test_below_bulk_threshold_not_critical(self) -> None:
         detector = ChatDetector(bulk_threshold=20)
-        msgs = ", ".join(
-            f'{{"role": "user", "content": "msg {i}"}}'
-            for i in range(3)
-        )
+        msgs = ", ".join(f'{{"role": "user", "content": "msg {i}"}}' for i in range(3))
         text = f'{{"messages": [{msgs}]}}'
         matches = detector.scan(text)
         assert not any(m.severity == "critical" for m in matches)

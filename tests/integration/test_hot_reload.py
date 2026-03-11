@@ -18,8 +18,12 @@ class TestPolicyHotReload:
             "name": "watch-test",
             "global": {"default_action": "allow"},
             "rules": [
-                {"id": "r1", "action": "block", "tool_type": "shell",
-                 "match": {"command_pattern": "^dangerous"}}
+                {
+                    "id": "r1",
+                    "action": "block",
+                    "tool_type": "shell",
+                    "match": {"command_pattern": "^dangerous"},
+                }
             ],
         }
         policy_file.write_text(yaml.dump(policy_data))
@@ -33,8 +37,12 @@ class TestPolicyHotReload:
 
         try:
             policy_data["rules"].append(
-                {"id": "r2", "action": "ask", "tool_type": "shell",
-                 "match": {"command_pattern": "^risky"}}
+                {
+                    "id": "r2",
+                    "action": "ask",
+                    "tool_type": "shell",
+                    "match": {"command_pattern": "^risky"},
+                }
             )
             time.sleep(0.5)
             policy_file.write_text(yaml.dump(policy_data))
@@ -51,8 +59,12 @@ class TestPolicyHotReload:
             "name": "watch-test",
             "global": {"default_action": "allow"},
             "rules": [
-                {"id": "r1", "action": "block", "tool_type": "shell",
-                 "match": {"command_pattern": "^dangerous"}}
+                {
+                    "id": "r1",
+                    "action": "block",
+                    "tool_type": "shell",
+                    "match": {"command_pattern": "^dangerous"},
+                }
             ],
         }
         policy_file.write_text(yaml.dump(policy_data))

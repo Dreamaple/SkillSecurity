@@ -8,7 +8,7 @@
     <a href="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml"><img src="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue" alt="Python">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
-    <img src="https://img.shields.io/badge/tests-287%20passed-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-317%20passed-brightgreen" alt="Tests">
   </p>
   <p align="center">
     <a href="README_zh.md">中文文档</a> · <a href="docs/how-it-works.md">Design Principles</a> · <a href="docs/threat-model.md">Threat Model</a>
@@ -53,6 +53,8 @@ SkillSecurity sits between the Agent and the tools, enforcing security policies 
 | **Skill Permissions** | Declare what each Skill can do via JSON manifests (intersection model) |
 | **Static Scanner** | Detect dangerous patterns (eval, subprocess, data exfil) in Skill source code |
 | **Audit Logging** | JSONL audit trail with automatic sensitive data redaction and log rotation |
+| **Behavior Chain Detection** | Detect multi-step attacks (read secret → POST externally) across tool calls |
+| **Framework Plugins** | One-line integration for LangChain, AutoGen, CrewAI, LlamaIndex, MCP/OpenClaw, n8n |
 | **Hot Reload** | Update security policies without restarting your application |
 | **Self-Protection** | SkillSecurity's own config files cannot be tampered with by agents |
 | **CLI Tool** | `skillsecurity check`, `scan`, `validate`, `init`, `log` commands |
@@ -194,49 +196,53 @@ guard = SkillGuard(policy_file="skillsecurity.yaml")
 | `strict` | block | Production — only whitelisted operations pass |
 | `development` | allow | Local dev — catches critical risks only |
 
-## Integration with AI Frameworks
+## One-Line Framework Integration
 
-SkillSecurity is **framework-agnostic**. It works with any agent by wrapping tool calls:
-
-### LangChain
+SkillSecurity provides **one-line** integration for popular AI agent frameworks:
 
 ```python
-from langchain.tools import BaseTool
-from skillsecurity import SkillGuard
+import skillsecurity
 
-guard = SkillGuard()
+# Enable — one line, all tools protected
+skillsecurity.protect("langchain")
+skillsecurity.protect("mcp")         # or "openclaw"
+skillsecurity.protect("autogen")
+skillsecurity.protect("crewai")
+skillsecurity.protect("llamaindex")
+skillsecurity.protect("n8n", port=9090)
 
-class SecureShellTool(BaseTool):
-    name = "shell"
-    description = "Execute shell commands securely"
-
-    def _run(self, command: str) -> str:
-        decision = guard.check({"tool": "shell", "command": command})
-        if decision.is_blocked:
-            return f"Blocked: {decision.reason}"
-        import subprocess
-        return subprocess.check_output(command, shell=True, text=True)
+# Disable — restore original behavior
+skillsecurity.unprotect("langchain")
 ```
 
-### MCP / OpenClaw
+With custom configuration:
+
+```python
+skillsecurity.protect("langchain", policy_file="strict.yaml")
+skillsecurity.protect("mcp", config={"privacy": {"enabled": True}})
+```
+
+### Manual Integration
+
+For custom frameworks, wrap tool calls directly:
 
 ```python
 from skillsecurity import SkillGuard
 
 guard = SkillGuard()
+decision = guard.check({"tool": "shell", "command": "rm -rf /"})
+if decision.is_blocked:
+    raise Exception(f"Blocked: {decision.reason}")
+```
 
-async def secure_mcp_call(tool_name: str, arguments: dict):
-    tool_type_map = {
-        "bash": "shell", "read_file": "file.read",
-        "write_file": "file.write", "http_request": "network.request",
-    }
-    decision = guard.check({
-        "tool": tool_type_map.get(tool_name, "shell"),
-        **arguments,
-    })
-    if decision.is_blocked:
-        raise Exception(f"Blocked: {decision.reason}")
-    return await mcp_client.call_tool(tool_name, arguments)
+### MCP / OpenClaw Handler Wrapper
+
+```python
+from skillsecurity.integrations.mcp import wrap_mcp_handler
+
+@wrap_mcp_handler
+async def my_tool_handler(name, arguments):
+    ...  # only executes if allowed
 ```
 
 ## Skill Permission Manifests
@@ -320,6 +326,7 @@ src/skillsecurity/
 │   ├── outbound.py      #   Outbound data inspector
 │   ├── financial.py     #   Financial operation detection
 │   └── domains.py       #   Domain intelligence / trust levels
+├── integrations/        # Framework adapters (LangChain, AutoGen, CrewAI, LlamaIndex, MCP, n8n)
 ├── config/              # Configuration (defaults, loader, hot-reload watcher)
 ├── manifest/            # Skill permission manifests
 ├── scanner/             # Static code scanner
@@ -328,7 +335,7 @@ src/skillsecurity/
 └── cli/                 # CLI commands (check, scan, init, validate, log)
 
 policies/                # Built-in policy templates (default, strict, development)
-tests/                   # 287 tests (unit + integration)
+tests/                   # 317 tests (unit + integration)
 docs/                    # Design docs, threat model, architecture
 ```
 
@@ -358,13 +365,26 @@ ruff check src/ tests/
 | [Threat Model](docs/threat-model.md) | 8 threat types with attack paths and defense strategies |
 | [Architecture](docs/architecture-overview.md) | System architecture, integration modes, tech stack |
 | [Data Classification](docs/data-classification-engine.md) | Sensitive data detection, outbound inspection, domain trust |
+| [QA Validation](docs/qa-validation.md) | False positive analysis, performance benchmarks, chat protection details |
 | [Requirements](SkillSecurity需求规格说明书.md) | Full product requirements specification (Chinese) |
+
+## Behavior Chain Detection
+
+SkillSecurity detects multi-step attacks that look innocent individually:
+
+```
+Step 1: file.read("~/.ssh/id_rsa")        ✅ allowed
+Step 2: file.read("~/.aws/credentials")   ✅ allowed
+Step 3: POST to pastebin.com              ❌ BLOCKED — chain:multi-secret-read triggered!
+```
+
+5 built-in chain rules cover: credential harvesting, database exfiltration, chat history theft, environment reconnaissance, and more.
 
 ## Roadmap
 
 - [x] **Phase 1**: Core interception engine + policy matching + CLI
 - [x] **Phase 2**: Skill permissions + static scanning + audit logging + privacy protection + chat protection
-- [ ] **Phase 3**: Behavior chain detection + multi-framework SDK adapters
+- [x] **Phase 3**: Behavior chain detection + multi-framework SDK adapters
 - [ ] **Phase 4**: Alert channels + confirmation UI + log export
 
 ## Contributing

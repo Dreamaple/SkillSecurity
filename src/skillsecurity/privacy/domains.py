@@ -94,15 +94,19 @@ class DomainIntelligence:
 
         for cat, patterns in self._trusted.items():
             if self._matches_any(domain, patterns):
-                return DomainInfo(domain=domain, trust_level=TrustLevel.TRUSTED,
-                                 category=cat, first_seen=first_seen)
+                return DomainInfo(
+                    domain=domain,
+                    trust_level=TrustLevel.TRUSTED,
+                    category=cat,
+                    first_seen=first_seen,
+                )
 
         if self._matches_any(domain, self._suspicious):
-            return DomainInfo(domain=domain, trust_level=TrustLevel.SUSPICIOUS,
-                             first_seen=first_seen)
+            return DomainInfo(
+                domain=domain, trust_level=TrustLevel.SUSPICIOUS, first_seen=first_seen
+            )
 
-        return DomainInfo(domain=domain, trust_level=TrustLevel.UNKNOWN,
-                         first_seen=first_seen)
+        return DomainInfo(domain=domain, trust_level=TrustLevel.UNKNOWN, first_seen=first_seen)
 
     def add_trusted(self, domain: str, category: str = "user") -> None:
         """Add a domain to the trusted list at runtime."""

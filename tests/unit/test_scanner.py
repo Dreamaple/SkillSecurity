@@ -1,4 +1,5 @@
 """Unit tests for static scanner."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -39,6 +40,7 @@ class TestAnalyzer:
         exfil = [i for i in issues if i.category == "data_exfiltration"]
         assert len(exfil) > 0
         assert any(i.severity == "critical" for i in exfil)
+
 
 class TestReportGeneration:
     def test_dangerous_skill_high_risk(self):

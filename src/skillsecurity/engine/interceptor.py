@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from skillsecurity.audit.logger import AuditLogger
 from skillsecurity.config.defaults import MAX_COMMAND_LENGTH
+from skillsecurity.engine.chain import ChainTracker
 from skillsecurity.engine.decision import DecisionEngine
 from skillsecurity.engine.policy import PolicyEngine
 from skillsecurity.models.decision import Decision, RuleRef
@@ -24,7 +25,7 @@ _NETWORK_WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 class Interceptor:
-    """Orchestrates: self-protection → policy matching → privacy check → decision."""
+    """Orchestrates: self-protection → policy matching → privacy check → chain check → decision."""
 
     def __init__(
         self,
@@ -33,12 +34,14 @@ class Interceptor:
         self_protection: SelfProtectionGuard,
         audit_logger: AuditLogger | None = None,
         outbound_inspector: OutboundInspector | None = None,
+        chain_tracker: ChainTracker | None = None,
     ) -> None:
         self._policy = policy_engine
         self._decision = decision_engine
         self._self_protection = self_protection
         self._audit_logger = audit_logger
         self._outbound_inspector = outbound_inspector
+        self._chain_tracker = chain_tracker
         self._skill_manifests: dict[str, SkillManifest] = {}
 
     def register_skill(self, skill_id: str, manifest: SkillManifest) -> None:
@@ -74,11 +77,19 @@ class Interceptor:
             if privacy_decision is not None:
                 final = self._finalize(privacy_decision, start)
                 self._log_check(tool_call, final)
+                self._record_chain(tool_call, final)
                 return final
 
             decision = self._decision.make_decision(tool_call, matched_rule)
             final = self._finalize(decision, start)
+
+            chain_decision = self._check_chain(tool_call, final)
+            if chain_decision is not None:
+                self._log_check(tool_call, chain_decision)
+                return chain_decision
+
             self._log_check(tool_call, final)
+            self._record_chain(tool_call, final)
             return final
 
         except Exception:
@@ -172,6 +183,56 @@ class Interceptor:
             severity=severity,
             rule_matched=RuleRef(id=rule_id, description=rule_desc),
             suggestions=result.suggestions,
+        )
+
+    def _record_chain(self, tool_call: ToolCall, decision: Decision) -> None:
+        """Record an event in the chain tracker (non-blocking)."""
+        if self._chain_tracker is None:
+            return
+        with contextlib.suppress(Exception):
+            self._chain_tracker.record_and_check(
+                tool_type=tool_call.tool_type.value,
+                params=tool_call.params,
+                action=decision.action.value,
+                session_id=tool_call.context.session_id,
+            )
+
+    def _check_chain(self, tool_call: ToolCall, decision: Decision) -> Decision | None:
+        """Check whether the current (allowed) call completes an attack chain."""
+        if self._chain_tracker is None:
+            return None
+        if decision.action != Action.ALLOW:
+            return None
+
+        match = self._chain_tracker.record_and_check(
+            tool_type=tool_call.tool_type.value,
+            params=tool_call.params,
+            action=decision.action.value,
+            session_id=tool_call.context.session_id,
+        )
+        if match is None:
+            return None
+
+        rule = match.rule
+        action = Action.BLOCK if rule.action == "block" else Action.ASK
+        try:
+            severity = Severity(rule.severity)
+        except ValueError:
+            severity = Severity.CRITICAL
+
+        chain_steps_desc = " → ".join(e.tool_type for e in match.matched_events)
+        reason = rule.message or (f"Behavior chain detected ({rule.id}): {chain_steps_desc}")
+
+        return self._finalize(
+            Decision(
+                action=action,
+                reason=reason,
+                severity=severity,
+                rule_matched=RuleRef(id=rule.id, description=rule.description),
+                suggestions=rule.suggestions
+                or ["Review the sequence of operations for this session."],
+            ),
+            time.perf_counter() - 0.001,
         )
 
     def _check_self_protection(self, tool_call: ToolCall) -> Decision | None:

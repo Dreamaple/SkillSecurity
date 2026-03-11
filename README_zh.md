@@ -8,7 +8,7 @@
     <a href="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml"><img src="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue" alt="Python">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
-    <img src="https://img.shields.io/badge/tests-287%20passed-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-317%20passed-brightgreen" alt="Tests">
   </p>
   <p align="center">
     <a href="README.md">English</a> · <a href="docs/how-it-works.md">设计原理</a> · <a href="docs/threat-model.md">威胁模型</a>
@@ -53,6 +53,8 @@ SkillSecurity 插在 Agent 和工具之间，以 < 10ms 的延迟实时执行安
 | **Skill 权限声明** | 通过 JSON 清单声明 Skill 可使用的权限（交叉授权模型） |
 | **静态代码扫描** | 在安装前扫描 Skill 代码中的危险模式（eval、subprocess、数据外发） |
 | **审计日志** | JSONL 格式的审计追踪，自动脱敏敏感数据，支持日志轮转 |
+| **行为链检测** | 检测多步攻击（读密钥文件 → POST 外发），跨调用追踪 |
+| **一键框架集成** | LangChain、AutoGen、CrewAI、LlamaIndex、MCP/OpenClaw、n8n 一行接入 |
 | **热加载** | 修改策略文件无需重启应用，实时生效 |
 | **自我保护** | SkillSecurity 自身的配置文件不允许被 Agent 篡改 |
 | **CLI 工具** | `skillsecurity check`、`scan`、`validate`、`init`、`log` 命令 |
@@ -218,64 +220,53 @@ guard = SkillGuard(config={
 })
 ```
 
-## 与 AI 框架集成
+## 一键框架集成
 
-SkillSecurity 是**框架无关**的，只需在工具执行前调用 `guard.check()` 即可。
-
-### LangChain
+一行代码即可为主流 AI Agent 框架加上安全防护：
 
 ```python
-from langchain.tools import BaseTool
+import skillsecurity
+
+# 开启 — 一行代码，所有工具调用自动受保护
+skillsecurity.protect("langchain")
+skillsecurity.protect("mcp")         # 同样支持 "openclaw"
+skillsecurity.protect("autogen")
+skillsecurity.protect("crewai")
+skillsecurity.protect("llamaindex")
+skillsecurity.protect("n8n", port=9090)
+
+# 关闭 — 还原框架原始行为
+skillsecurity.unprotect("langchain")
+```
+
+支持自定义配置：
+
+```python
+skillsecurity.protect("langchain", policy_file="strict.yaml")
+skillsecurity.protect("mcp", config={"privacy": {"enabled": True}})
+```
+
+### 手动集成
+
+对于自定义框架，直接包装工具调用：
+
+```python
 from skillsecurity import SkillGuard
 
 guard = SkillGuard()
-
-class SecureShellTool(BaseTool):
-    name = "shell"
-    description = "安全执行 Shell 命令"
-
-    def _run(self, command: str) -> str:
-        decision = guard.check({"tool": "shell", "command": command})
-        if decision.is_blocked:
-            return f"已拦截: {decision.reason}"
-        import subprocess
-        return subprocess.check_output(command, shell=True, text=True)
+decision = guard.check({"tool": "shell", "command": "rm -rf /"})
+if decision.is_blocked:
+    raise Exception(f"已拦截: {decision.reason}")
 ```
 
-### MCP / OpenClaw
+### MCP / OpenClaw 处理器包装
 
 ```python
-from skillsecurity import SkillGuard
+from skillsecurity.integrations.mcp import wrap_mcp_handler
 
-guard = SkillGuard()
-
-async def secure_mcp_call(tool_name: str, arguments: dict):
-    tool_type_map = {
-        "bash": "shell", "read_file": "file.read",
-        "write_file": "file.write", "http_request": "network.request",
-    }
-    decision = guard.check({
-        "tool": tool_type_map.get(tool_name, "shell"),
-        **arguments,
-    })
-    if decision.is_blocked:
-        raise Exception(f"已拦截: {decision.reason}")
-    return await mcp_client.call_tool(tool_name, arguments)
-```
-
-### AutoGPT / CrewAI
-
-```python
-from skillsecurity import SkillGuard, SkillSecurityError
-
-guard = SkillGuard()
-
-@guard.protect
-def run_tool(tool_type, **params):
-    # 你的工具执行逻辑
-    ...
-
-# 安全的调用正常执行，危险的调用自动抛出 SkillSecurityError
+@wrap_mcp_handler
+async def my_tool_handler(name, arguments):
+    ...  # 仅在允许时才执行
 ```
 
 ## Skill 权限清单
@@ -360,6 +351,7 @@ src/skillsecurity/
 │   ├── outbound.py      #   出站数据检查器
 │   ├── financial.py     #   财务操作识别器
 │   └── domains.py       #   域名信誉库
+├── integrations/        # 框架适配器（LangChain, AutoGen, CrewAI, LlamaIndex, MCP, n8n）
 ├── config/              # 配置（默认值、加载器、热加载监听器）
 ├── manifest/            # Skill 权限清单
 ├── scanner/             # 静态代码扫描器
@@ -368,7 +360,7 @@ src/skillsecurity/
 └── cli/                 # CLI 命令（check, scan, init, validate, log）
 
 policies/                # 内置策略模板（default, strict, development）
-tests/                   # 287 个测试（单元测试 + 集成测试）
+tests/                   # 317 个测试（单元测试 + 集成测试）
 docs/                    # 设计文档、威胁模型、架构概述
 ```
 
@@ -398,13 +390,26 @@ ruff check src/ tests/
 | [威胁模型](docs/threat-model.md) | 八类威胁的攻击路径与防御策略 |
 | [架构概述](docs/architecture-overview.md) | 系统架构、集成模式、技术选型 |
 | [数据分类引擎](docs/data-classification-engine.md) | 敏感数据检测、聊天保护、出站检查、域名信誉 |
+| [QA 验证](docs/qa-validation.md) | 误报率分析、性能实测、Chat 保护详解、行为链检测方案 |
 | [需求规格说明书](SkillSecurity需求规格说明书.md) | 完整的产品需求文档 |
+
+## 行为链检测
+
+SkillSecurity 可以检测单独看无害但组合起来是攻击的多步调用：
+
+```
+Step 1: file.read("~/.ssh/id_rsa")        ✅ 允许
+Step 2: file.read("~/.aws/credentials")   ✅ 允许
+Step 3: POST to pastebin.com              ❌ 拦截 — chain:multi-secret-read 触发!
+```
+
+内置 5 条链规则覆盖：密钥收割、数据库外泄、聊天记录窃取、环境侦察等。
 
 ## 路线图
 
 - [x] **Phase 1**：核心拦截引擎 + 策略匹配 + CLI 工具
 - [x] **Phase 2**：Skill 权限 + 静态扫描 + 审计日志 + 隐私保护 + 聊天记录保护
-- [ ] **Phase 3**：行为链检测 + 多框架 SDK 适配器
+- [x] **Phase 3**：行为链检测 + 多框架 SDK 适配器
 - [ ] **Phase 4**：告警通道 + 用户确认界面 + 日志导出
 
 ## 贡献

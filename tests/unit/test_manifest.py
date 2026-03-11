@@ -1,4 +1,5 @@
 """Unit tests for manifest parser."""
+
 from __future__ import annotations
 
 import json
@@ -15,7 +16,10 @@ class TestManifestParser:
             "version": "1.0.0",
             "name": "Weather Forecast",
             "permissions": {
-                "network.read": {"description": "Fetch weather", "domains": ["api.openweathermap.org"]}
+                "network.read": {
+                    "description": "Fetch weather",
+                    "domains": ["api.openweathermap.org"],
+                }
             },
         }
         path = tmp_path / "skill-manifest.json"
@@ -44,7 +48,9 @@ class TestManifestParser:
 
     def test_invalid_skill_id_format(self):
         with pytest.raises(ManifestValidationError, match="skill_id"):
-            ManifestParser.parse_dict({"skill_id": "INVALID", "version": "1.0.0", "name": "X", "permissions": {}})
+            ManifestParser.parse_dict(
+                {"skill_id": "INVALID", "version": "1.0.0", "name": "X", "permissions": {}}
+            )
 
     def test_permission_with_domains(self, tmp_path):
         manifest = {

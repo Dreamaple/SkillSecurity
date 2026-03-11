@@ -1,4 +1,5 @@
 """Unit tests for config loader."""
+
 from __future__ import annotations
 
 import pytest
@@ -10,10 +11,7 @@ from skillsecurity.engine.policy import PolicyLoadError
 class TestConfigLoader:
     def test_load_and_validate_valid(self, tmp_path):
         policy = tmp_path / "policy.yaml"
-        policy.write_text(
-            "version: '1.0'\nname: test\nrules:\n"
-            "  - id: r1\n    action: block\n"
-        )
+        policy.write_text("version: '1.0'\nname: test\nrules:\n  - id: r1\n    action: block\n")
         engine = load_and_validate_policy(policy)
         assert len(engine.rules) == 1
 
@@ -23,19 +21,13 @@ class TestConfigLoader:
 
     def test_validate_valid_file(self, tmp_path):
         policy = tmp_path / "policy.yaml"
-        policy.write_text(
-            "version: '1.0'\nname: test\nrules:\n"
-            "  - id: r1\n    action: block\n"
-        )
+        policy.write_text("version: '1.0'\nname: test\nrules:\n  - id: r1\n    action: block\n")
         warnings = validate_policy_file(policy)
         assert isinstance(warnings, list)
 
     def test_validate_missing_name_warns(self, tmp_path):
         policy = tmp_path / "policy.yaml"
-        policy.write_text(
-            "version: '1.0'\nrules:\n"
-            "  - id: r1\n    action: block\n"
-        )
+        policy.write_text("version: '1.0'\nrules:\n  - id: r1\n    action: block\n")
         warnings = validate_policy_file(policy)
         assert any("name" in w.lower() for w in warnings)
 

@@ -93,10 +93,7 @@ class TestDataClassifier:
         assert any("chat" in m.type for m in result.matches)
 
     def test_classify_bulk_chat_is_critical(self, classifier: DataClassifier) -> None:
-        msgs = ", ".join(
-            f'{{"role": "user", "content": "message {i}"}}'
-            for i in range(10)
-        )
+        msgs = ", ".join(f'{{"role": "user", "content": "message {i}"}}' for i in range(10))
         text = f'{{"messages": [{msgs}]}}'
         result = classifier.classify(text)
         assert result.has_critical()

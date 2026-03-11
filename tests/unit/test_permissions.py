@@ -1,4 +1,5 @@
 """Unit tests for permission types and constraint matching."""
+
 from __future__ import annotations
 
 from skillsecurity.manifest.permissions import PermissionSpec, PermissionType, SkillManifest
@@ -47,9 +48,7 @@ class TestSkillManifest:
             name="Test",
             permissions={"network.read": PermissionSpec(domains=["api.example.com"])},
         )
-        allowed, _ = manifest.check_operation(
-            "network.read", domain="api.example.com"
-        )
+        allowed, _ = manifest.check_operation("network.read", domain="api.example.com")
         assert allowed is True
 
     def test_check_operation_denied_perm(self):
@@ -82,9 +81,7 @@ class TestSkillManifest:
             name="Test",
             permissions={"network.read": PermissionSpec(domains=["api.example.com"])},
         )
-        allowed, reason = manifest.check_operation(
-            "network.read", domain="evil.com"
-        )
+        allowed, reason = manifest.check_operation("network.read", domain="evil.com")
         assert allowed is False
         assert "domain" in reason.lower()
 
@@ -95,9 +92,7 @@ class TestSkillManifest:
             name="Test",
             permissions={"file.read": PermissionSpec(paths=["/home/user/*"])},
         )
-        allowed, reason = manifest.check_operation(
-            "file.read", path="/etc/shadow"
-        )
+        allowed, reason = manifest.check_operation("file.read", path="/etc/shadow")
         assert allowed is False
         assert "path" in reason.lower()
 

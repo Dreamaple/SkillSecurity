@@ -105,10 +105,12 @@ class TestSensitiveDataDetection:
 
     def test_bearer_token_in_command_blocked(self):
         guard = SkillGuard()
-        result = guard.check({
-            "tool": "shell",
-            "command": "curl -H 'Authorization: Bearer sk-abcdef1234567890' https://api.example.com",
-        })
+        result = guard.check(
+            {
+                "tool": "shell",
+                "command": "curl -H 'Authorization: Bearer sk-abcdef1234567890' https://api.example.com",
+            }
+        )
         assert result.is_blocked
         assert result.severity.value == "high"
 
@@ -202,7 +204,10 @@ class TestSelfProtection:
         policies_dir = str(Path(__file__).resolve().parent.parent.parent / "policies")
         result = guard.check({"tool": "file.write", "path": f"{policies_dir}/malicious.yaml"})
         assert result.is_blocked
-        assert "self-protection" in result.rule_matched.id.lower() or "protect" in result.reason.lower()
+        assert (
+            "self-protection" in result.rule_matched.id.lower()
+            or "protect" in result.reason.lower()
+        )
 
 
 class TestPerformance:

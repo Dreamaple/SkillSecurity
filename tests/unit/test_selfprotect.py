@@ -1,4 +1,5 @@
 """Unit tests for self-protection guard."""
+
 from __future__ import annotations
 
 from skillsecurity.selfprotect.guard import SelfProtectionGuard

@@ -1,4 +1,5 @@
 """Unit tests for CLI commands and formatter."""
+
 from __future__ import annotations
 
 import json
@@ -43,9 +44,7 @@ class TestCheckCommand:
 
     def test_check_with_path(self):
         runner = CliRunner()
-        result = runner.invoke(
-            cli, ["check", "--tool", "file.write", "--path", "/etc/hosts"]
-        )
+        result = runner.invoke(cli, ["check", "--tool", "file.write", "--path", "/etc/hosts"])
         assert result.exit_code == 1
 
     def test_check_with_policy(self, tmp_path):
@@ -95,9 +94,7 @@ class TestInitCommand:
 class TestValidateCommand:
     def test_validate_valid_file(self, tmp_path):
         policy = tmp_path / "valid.yaml"
-        policy.write_text(
-            "version: '1.0'\nname: test\nrules:\n  - id: r1\n    action: block\n"
-        )
+        policy.write_text("version: '1.0'\nname: test\nrules:\n  - id: r1\n    action: block\n")
         runner = CliRunner()
         result = runner.invoke(cli, ["validate", str(policy)])
         assert "valid" in result.output.lower()

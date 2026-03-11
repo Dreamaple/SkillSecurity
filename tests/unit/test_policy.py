@@ -92,7 +92,9 @@ class TestConfigValidation:
 
     def test_yaml_syntax_error_reports_location(self, tmp_path):
         bad_yaml = tmp_path / "bad.yaml"
-        bad_yaml.write_text("version: '1.0'\nrules:\n  - id: 'test'\n    action: block\n  bad_indent")
+        bad_yaml.write_text(
+            "version: '1.0'\nrules:\n  - id: 'test'\n    action: block\n  bad_indent"
+        )
         engine = PolicyEngine()
         with pytest.raises(PolicyLoadError, match="YAML syntax error"):
             engine.load_file(bad_yaml)
@@ -110,20 +112,14 @@ class TestConfigValidation:
 
     def test_invalid_action_raises(self, tmp_path):
         policy = tmp_path / "badaction.yaml"
-        policy.write_text(
-            "version: '1.0'\nname: test\nrules:\n"
-            "  - id: r1\n    action: deny\n"
-        )
+        policy.write_text("version: '1.0'\nname: test\nrules:\n  - id: r1\n    action: deny\n")
         engine = PolicyEngine()
         with pytest.raises(PolicyLoadError, match="Invalid action"):
             engine.load_file(policy)
 
     def test_missing_rule_id_raises(self, tmp_path):
         policy = tmp_path / "noid.yaml"
-        policy.write_text(
-            "version: '1.0'\nname: test\nrules:\n"
-            "  - action: block\n"
-        )
+        policy.write_text("version: '1.0'\nname: test\nrules:\n  - action: block\n")
         engine = PolicyEngine()
         with pytest.raises(PolicyLoadError, match="missing required 'id'"):
             engine.load_file(policy)
@@ -140,7 +136,9 @@ class TestConfigValidation:
 
     def test_empty_rules_uses_default_action(self, tmp_path):
         policy = tmp_path / "empty.yaml"
-        policy.write_text("version: '1.0'\nname: test\nglobal:\n  default_action: block\nrules: []\n")
+        policy.write_text(
+            "version: '1.0'\nname: test\nglobal:\n  default_action: block\nrules: []\n"
+        )
         engine = PolicyEngine()
         engine.load_file(policy)
         assert len(engine.rules) == 0

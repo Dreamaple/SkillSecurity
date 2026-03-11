@@ -170,7 +170,5 @@ class OutboundInspector:
                 "Add it via configuration if this is expected."
             )
         elif domain_info.trust_level == TrustLevel.SUSPICIOUS:
-            suggestions.append(
-                f"Domain '{domain_info.domain}' is flagged as suspicious."
-            )
+            suggestions.append(f"Domain '{domain_info.domain}' is flagged as suspicious.")
         return suggestions

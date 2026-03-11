@@ -50,30 +50,55 @@ def _luhn_check(number: str) -> bool:
 
 
 _PATTERNS: list[PIIPattern] = [
-    PIIPattern("email", "Email Address",
-               re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"),
-               "high", "global"),
-    PIIPattern("phone-cn", "Chinese Phone Number",
-               re.compile(r"(?<!\d)(?:\+86)?1[3-9]\d{9}(?!\d)"),
-               "high", "cn"),
-    PIIPattern("phone-us", "US Phone Number",
-               re.compile(r"(?<!\d)(?:\+1)?[2-9]\d{2}[\-.]?\d{3}[\-.]?\d{4}(?!\d)"),
-               "high", "us"),
-    PIIPattern("id-card-cn", "Chinese ID Card Number",
-               re.compile(
-                   r"(?<!\d)[1-9]\d{5}(?:19|20)\d{2}"
-                   r"(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[0-9Xx](?!\d)"
-               ),
-               "critical", "cn"),
-    PIIPattern("ssn-us", "US Social Security Number",
-               re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)"),
-               "critical", "us"),
-    PIIPattern("credit-card", "Credit Card Number",
-               re.compile(
-                   r"(?<!\d)(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}"
-                   r"|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})(?!\d)"
-               ),
-               "critical", "global", validation="luhn"),
+    PIIPattern(
+        "email",
+        "Email Address",
+        re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"),
+        "high",
+        "global",
+    ),
+    PIIPattern(
+        "phone-cn",
+        "Chinese Phone Number",
+        re.compile(r"(?<!\d)(?:\+86)?1[3-9]\d{9}(?!\d)"),
+        "high",
+        "cn",
+    ),
+    PIIPattern(
+        "phone-us",
+        "US Phone Number",
+        re.compile(r"(?<!\d)(?:\+1)?[2-9]\d{2}[\-.]?\d{3}[\-.]?\d{4}(?!\d)"),
+        "high",
+        "us",
+    ),
+    PIIPattern(
+        "id-card-cn",
+        "Chinese ID Card Number",
+        re.compile(
+            r"(?<!\d)[1-9]\d{5}(?:19|20)\d{2}"
+            r"(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[0-9Xx](?!\d)"
+        ),
+        "critical",
+        "cn",
+    ),
+    PIIPattern(
+        "ssn-us",
+        "US Social Security Number",
+        re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)"),
+        "critical",
+        "us",
+    ),
+    PIIPattern(
+        "credit-card",
+        "Credit Card Number",
+        re.compile(
+            r"(?<!\d)(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}"
+            r"|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})(?!\d)"
+        ),
+        "critical",
+        "global",
+        validation="luhn",
+    ),
 ]
 
 
@@ -93,13 +118,15 @@ class PIIDetector:
                 value = m.group()
                 if pp.validation == "luhn" and not _luhn_check(value):
                     continue
-                matches.append(PIIMatch(
-                    pattern_id=pp.id,
-                    name=pp.name,
-                    severity=pp.severity,
-                    region=pp.region,
-                    matched_value=value,
-                    start=m.start(),
-                    end=m.end(),
-                ))
+                matches.append(
+                    PIIMatch(
+                        pattern_id=pp.id,
+                        name=pp.name,
+                        severity=pp.severity,
+                        region=pp.region,
+                        matched_value=value,
+                        start=m.start(),
+                        end=m.end(),
+                    )
+                )
         return matches

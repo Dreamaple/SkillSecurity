@@ -76,8 +76,8 @@ _STRUCTURE_PATTERNS: list[ChatPattern] = [
         "chat-log-timestamped",
         "Timestamped chat log",
         re.compile(
-            r'\[\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?\]'
-            r'\s*(?:User|Assistant|System|Human|AI|Bot)\s*:',
+            r"\[\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?\]"
+            r"\s*(?:User|Assistant|System|Human|AI|Bot)\s*:",
             re.IGNORECASE,
         ),
         "medium",
@@ -103,11 +103,11 @@ _FILE_PATH_PATTERNS: list[ChatPattern] = [
         "chat-history-file",
         "Chat history file path",
         re.compile(
-            r'(?:chat[_\-]?history|conversations?|chat[_\-]?log|message[_\-]?log'
-            r'|dialog(?:ue)?s?|chat[_\-]?export|chat[_\-]?backup'
-            r'|thread[_\-]?history|chat[_\-]?archive'
-            r'|\.chathistory|\.chat_sessions)'
-            r'(?:\.(?:json|jsonl|db|sqlite|csv|txt|log|yaml|yml|xml|md|html|parquet))?',
+            r"(?:chat[_\-]?history|conversations?|chat[_\-]?log|message[_\-]?log"
+            r"|dialog(?:ue)?s?|chat[_\-]?export|chat[_\-]?backup"
+            r"|thread[_\-]?history|chat[_\-]?archive"
+            r"|\.chathistory|\.chat_sessions)"
+            r"(?:\.(?:json|jsonl|db|sqlite|csv|txt|log|yaml|yml|xml|md|html|parquet))?",
             re.IGNORECASE,
         ),
         "high",
@@ -118,8 +118,8 @@ _FILE_PATH_PATTERNS: list[ChatPattern] = [
         "chat-app-data-dir",
         "Chat application data directory",
         re.compile(
-            r'(?:\.(?:telegram|signal|whatsapp|wechat|slack|discord|teams)|'
-            r'(?:Library/Messages|AppData.*?(?:Telegram|Signal|WhatsApp|WeChat|Slack|Discord)))',
+            r"(?:\.(?:telegram|signal|whatsapp|wechat|slack|discord|teams)|"
+            r"(?:Library/Messages|AppData.*?(?:Telegram|Signal|WhatsApp|WeChat|Slack|Discord)))",
             re.IGNORECASE,
         ),
         "high",
@@ -130,24 +130,30 @@ _FILE_PATH_PATTERNS: list[ChatPattern] = [
 
 def _count_messages(text: str) -> int:
     """Estimate the number of chat messages in the text."""
-    role_hits = len(re.findall(
-        r'["\']role["\']\s*:\s*["\'](?:user|assistant|system|human|ai|bot|tool)["\']',
-        text,
-        re.IGNORECASE,
-    ))
+    role_hits = len(
+        re.findall(
+            r'["\']role["\']\s*:\s*["\'](?:user|assistant|system|human|ai|bot|tool)["\']',
+            text,
+            re.IGNORECASE,
+        )
+    )
     if role_hits > 0:
         return role_hits
-    sender_hits = len(re.findall(
-        r'["\'](?:sender|author|from|speaker)["\']\s*:\s*["\']',
-        text,
-        re.IGNORECASE,
-    ))
+    sender_hits = len(
+        re.findall(
+            r'["\'](?:sender|author|from|speaker)["\']\s*:\s*["\']',
+            text,
+            re.IGNORECASE,
+        )
+    )
     if sender_hits > 0:
         return sender_hits
-    timestamp_hits = len(re.findall(
-        r'\[\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}',
-        text,
-    ))
+    timestamp_hits = len(
+        re.findall(
+            r"\[\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}",
+            text,
+        )
+    )
     return timestamp_hits
 
 
@@ -183,16 +189,18 @@ class ChatDetector:
                 severity = cp.severity
                 if msg_count >= self._bulk_threshold:
                     severity = "critical"
-                matches.append(ChatMatch(
-                    pattern_id=cp.id,
-                    name=cp.name,
-                    severity=severity,
-                    category=cp.category,
-                    matched_value=m.group()[:100],
-                    start=m.start(),
-                    end=m.end(),
-                    message_count=msg_count,
-                ))
+                matches.append(
+                    ChatMatch(
+                        pattern_id=cp.id,
+                        name=cp.name,
+                        severity=severity,
+                        category=cp.category,
+                        matched_value=m.group()[:100],
+                        start=m.start(),
+                        end=m.end(),
+                        message_count=msg_count,
+                    )
+                )
                 seen_ids.add(cp.id)
 
         return matches
@@ -203,13 +211,15 @@ class ChatDetector:
         for cp in self._file_patterns:
             m = cp.pattern.search(path)
             if m:
-                matches.append(ChatMatch(
-                    pattern_id=cp.id,
-                    name=cp.name,
-                    severity=cp.severity,
-                    category=cp.category,
-                    matched_value=m.group(),
-                    start=m.start(),
-                    end=m.end(),
-                ))
+                matches.append(
+                    ChatMatch(
+                        pattern_id=cp.id,
+                        name=cp.name,
+                        severity=cp.severity,
+                        category=cp.category,
+                        matched_value=m.group(),
+                        start=m.start(),
+                        end=m.end(),
+                    )
+                )
         return matches

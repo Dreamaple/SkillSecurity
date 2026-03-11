@@ -1,4 +1,5 @@
 """Integration test for full scan pipeline."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,7 +10,9 @@ from skillsecurity import SkillGuard
 class TestScanPipeline:
     def test_dangerous_skill_high_risk(self):
         guard = SkillGuard()
-        skill_path = str(Path(__file__).parent.parent / "testdata" / "sample_skills" / "dangerous_skill")
+        skill_path = str(
+            Path(__file__).parent.parent / "testdata" / "sample_skills" / "dangerous_skill"
+        )
         report = guard.scan_skill(skill_path)
         assert report["risk_level"] in ("high", "critical")
         assert report["summary"]["total_issues"] > 0
@@ -23,7 +26,9 @@ class TestScanPipeline:
 
     def test_permission_mismatch_detection(self):
         guard = SkillGuard()
-        skill_path = str(Path(__file__).parent.parent / "testdata" / "sample_skills" / "dangerous_skill")
+        skill_path = str(
+            Path(__file__).parent.parent / "testdata" / "sample_skills" / "dangerous_skill"
+        )
         manifest = {
             "skill_id": "acme/dangerous-test",
             "version": "1.0.0",

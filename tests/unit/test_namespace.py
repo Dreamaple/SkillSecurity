@@ -1,4 +1,5 @@
 """Unit tests for namespace validation."""
+
 from __future__ import annotations
 
 import pytest
