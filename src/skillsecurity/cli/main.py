@@ -305,11 +305,17 @@ def _get_site_packages() -> Path:
     raise click.ClickException("Cannot locate site-packages directory")
 
 
+_PTH_CONTENT = (
+    "import importlib.util as _u;"
+    ' exec("import skillsecurity.startup")'
+    ' if _u.find_spec("skillsecurity") else None\n'
+)
+
+
 def _install_pth_hook() -> Path:
     sp = _get_site_packages()
     pth = sp / _PTH_FILE_NAME
-    if not pth.exists():
-        pth.write_text("import skillsecurity.startup\n", encoding="utf-8")
+    pth.write_text(_PTH_CONTENT, encoding="utf-8")
     return pth
 
 
