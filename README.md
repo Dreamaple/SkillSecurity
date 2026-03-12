@@ -8,7 +8,7 @@
     <a href="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml"><img src="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue" alt="Python">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
-    <img src="https://img.shields.io/badge/tests-358%20passed-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-366%20passed-brightgreen" alt="Tests">
   </p>
   <p align="center">
     <a href="README_zh.md">中文文档</a> · <a href="docs/how-it-works.md">Design Principles</a> · <a href="docs/threat-model.md">Threat Model</a>

@@ -38,6 +38,8 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             self._json_response(self.api.get_frameworks())
         elif path == "/api/config":
             self._json_response(self.api.get_config())
+        elif path == "/api/scan/paths":
+            self._json_response(self.api.get_scan_paths())
         else:
             self.send_error(404)
 

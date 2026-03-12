@@ -27,7 +27,6 @@ body {
 }
 .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
-/* Header */
 .header {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 28px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
@@ -40,10 +39,8 @@ body {
   padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
 }
 .badge-green { background: rgba(52,211,153,.15); color: var(--green); }
-.badge-red { background: rgba(248,113,113,.15); color: var(--red); }
 .uptime { color: var(--text2); font-size: 13px; }
 
-/* Stats Cards */
 .stats-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px; margin-bottom: 28px;
@@ -60,11 +57,9 @@ body {
 .v-orange { color: var(--orange); }
 .v-blue { color: var(--blue); }
 
-/* Two-column layout */
-.main-grid { display: grid; grid-template-columns: 1fr 360px; gap: 20px; }
-@media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+.main-grid { display: grid; grid-template-columns: 1fr 400px; gap: 20px; }
+@media (max-width: 960px) { .main-grid { grid-template-columns: 1fr; } }
 
-/* Panels */
 .panel {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); overflow: hidden;
@@ -76,7 +71,6 @@ body {
 }
 .panel-body { padding: 0; }
 
-/* Log table */
 .log-filters {
   display: flex; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border);
 }
@@ -105,7 +99,6 @@ body {
 .log-reason { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .log-time { color: var(--text2); font-size: 11px; white-space: nowrap; }
 
-/* Framework cards */
 .fw-list { padding: 8px; }
 .fw-card {
   display: flex; align-items: center; justify-content: space-between;
@@ -115,15 +108,16 @@ body {
 .fw-card:hover { background: #2a2e3e; }
 .fw-info { display: flex; align-items: center; gap: 10px; }
 .fw-name { font-size: 13px; font-weight: 600; }
-.fw-status {
-  font-size: 11px; padding: 2px 8px; border-radius: 4px;
+.fw-detect {
+  font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 6px;
 }
-.fw-installed { color: var(--green); background: rgba(52,211,153,.1); }
-.fw-missing { color: var(--text2); background: rgba(139,143,168,.1); }
+.fw-detected { color: var(--green); background: rgba(52,211,153,.1); }
+.fw-undetected { color: var(--text2); background: rgba(139,143,168,.1); }
 
 .fw-toggle {
   width: 44px; height: 24px; border-radius: 12px; border: none;
   cursor: pointer; position: relative; transition: background .2s;
+  flex-shrink: 0;
 }
 .fw-toggle.on { background: var(--green); }
 .fw-toggle.off { background: var(--border); }
@@ -133,11 +127,15 @@ body {
 }
 .fw-toggle.on::after { left: 23px; }
 .fw-toggle.off::after { left: 3px; }
-.fw-toggle:disabled { opacity: 0.3; cursor: not-allowed; }
+.fw-toggle.loading { opacity: 0.5; pointer-events: none; }
 
-/* Scan section */
+.fw-note {
+  padding: 8px 16px; font-size: 11px; color: var(--text2);
+  border-top: 1px solid var(--border);
+}
+
 .scan-section { padding: 16px 20px; }
-.scan-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.scan-input-row { display: flex; gap: 8px; margin-bottom: 8px; }
 .scan-input {
   flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface2); color: var(--text); font-size: 13px;
@@ -146,31 +144,65 @@ body {
 .btn {
   padding: 8px 16px; border-radius: 8px; border: none;
   background: var(--accent); color: #fff; font-size: 13px; font-weight: 600;
-  cursor: pointer; transition: opacity .15s;
+  cursor: pointer; transition: opacity .15s; white-space: nowrap;
 }
 .btn:hover { opacity: 0.85; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.scan-result { font-size: 12px; color: var(--text2); }
+.btn-sm {
+  padding: 4px 10px; font-size: 11px; border-radius: 6px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text2); cursor: pointer; transition: all .15s;
+}
+.btn-sm:hover { border-color: var(--accent); color: var(--text); }
+.btn-sm.exists { border-color: var(--green); color: var(--green); }
+
+.quick-paths {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;
+}
+.quick-path {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 6px; font-size: 11px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text2); cursor: pointer; transition: all .15s;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+.quick-path:hover { border-color: var(--accent); color: var(--text); }
+.quick-path.exists { border-color: rgba(52,211,153,.4); }
+.quick-path .dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+.dot-green { background: var(--green); }
+.dot-gray { background: var(--text2); }
+
+.scan-result { font-size: 12px; color: var(--text2); margin-top: 8px; }
 .scan-result pre {
   background: var(--surface2); padding: 10px; border-radius: 8px;
   max-height: 200px; overflow-y: auto; white-space: pre-wrap; font-size: 11px;
+  color: var(--text);
 }
 
-/* Empty state */
 .empty { padding: 40px; text-align: center; color: var(--text2); font-size: 13px; }
 
-/* Severity bar */
 .sev-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 12px; gap: 2px; }
 .sev-bar div { border-radius: 3px; transition: width .5s; }
 .sev-crit { background: var(--red); }
 .sev-high { background: var(--orange); }
 .sev-med { background: var(--blue); }
 .sev-low { background: var(--green); }
+
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  padding: 10px 20px; border-radius: 8px; font-size: 13px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  opacity: 0; transform: translateY(10px);
+  transition: all .3s; pointer-events: none; z-index: 100;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
 </style>
 </head>
 <body>
 <div class="container">
-  <!-- Header -->
   <div class="header">
     <h1><span>Skill</span>Security Dashboard</h1>
     <div class="header-right">
@@ -179,7 +211,6 @@ body {
     </div>
   </div>
 
-  <!-- Stats -->
   <div class="stats-grid">
     <div class="stat-card">
       <div class="label">Total Checks</div>
@@ -203,7 +234,6 @@ body {
     </div>
   </div>
 
-  <!-- Severity bar -->
   <div class="stat-card" style="margin-bottom:28px;">
     <div class="label">Severity Distribution</div>
     <div style="display:flex;gap:16px;font-size:12px;margin-top:8px;">
@@ -215,9 +245,7 @@ body {
     <div class="sev-bar" id="sev-bar"></div>
   </div>
 
-  <!-- Main layout -->
   <div class="main-grid">
-    <!-- Left: Logs -->
     <div class="panel">
       <div class="panel-header">
         <span>Recent Defense Logs</span>
@@ -234,23 +262,28 @@ body {
       </div>
     </div>
 
-    <!-- Right: Frameworks + Scan -->
     <div style="display:flex;flex-direction:column;gap:20px;">
+      <!-- Frameworks -->
       <div class="panel">
-        <div class="panel-header">
-          <span>Framework Protection</span>
-        </div>
+        <div class="panel-header"><span>Framework Protection</span></div>
         <div class="panel-body">
           <div class="fw-list" id="fw-list"></div>
+          <div class="fw-note">
+            Tip: Protection works independently of framework installation.
+            Toggle on to pre-configure &mdash; it will activate once the framework is available.
+          </div>
         </div>
       </div>
 
+      <!-- Scanner -->
       <div class="panel">
         <div class="panel-header"><span>Skill Scanner</span></div>
         <div class="panel-body">
           <div class="scan-section">
+            <div style="margin-bottom:10px;font-size:12px;color:var(--text2)">Quick scan (click a path):</div>
+            <div class="quick-paths" id="quick-paths"></div>
             <div class="scan-input-row">
-              <input class="scan-input" id="scan-path" placeholder="Enter skill path to scan...">
+              <input class="scan-input" id="scan-path" placeholder="Or enter a custom path...">
               <button class="btn" id="scan-btn" onclick="doScan()">Scan</button>
             </div>
             <div class="scan-result" id="scan-result"></div>
@@ -261,8 +294,17 @@ body {
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
 let currentFilter = '';
+
+function showToast(msg, duration) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration || 2500);
+}
 
 async function fetchJSON(url, opts) {
   const resp = await fetch(url, opts);
@@ -277,23 +319,23 @@ async function refreshStats() {
   document.getElementById('stat-allow').textContent = s.counts.allow.toLocaleString();
   document.getElementById('uptime').textContent = 'Uptime: ' + s.uptime;
 
-  const period = s.first_event ? 'Since ' + s.first_event.slice(0, 16).replace('T', ' ') : 'No events yet';
+  const period = s.first_event
+    ? 'Since ' + s.first_event.slice(0, 16).replace('T', ' ')
+    : 'No events yet';
   document.getElementById('stat-period').textContent = period;
 
-  // Severity
   document.getElementById('sev-crit').textContent = s.severity.critical;
   document.getElementById('sev-high').textContent = s.severity.high;
   document.getElementById('sev-med').textContent = s.severity.medium;
   document.getElementById('sev-low').textContent = s.severity.low;
 
   const total = s.severity.critical + s.severity.high + s.severity.medium + s.severity.low || 1;
-  const bar = document.getElementById('sev-bar');
-  bar.innerHTML = [
+  document.getElementById('sev-bar').innerHTML = [
     ['sev-crit', s.severity.critical],
     ['sev-high', s.severity.high],
     ['sev-med', s.severity.medium],
     ['sev-low', s.severity.low],
-  ].map(([cls, v]) => v > 0 ? `<div class="${cls}" style="width:${v/total*100}%"></div>` : '').join('');
+  ].map(([cls, v]) => v > 0 ? '<div class="' + cls + '" style="width:' + (v/total*100) + '%"></div>' : '').join('');
 }
 
 async function refreshLogs() {
@@ -301,25 +343,26 @@ async function refreshLogs() {
   if (currentFilter) params.set('action', currentFilter);
   const logs = await fetchJSON('/api/logs?' + params);
 
-  const el = document.getElementById('log-list');
   document.getElementById('log-count').textContent = logs.length + ' entries';
+  const el = document.getElementById('log-list');
 
   if (!logs.length) {
     el.innerHTML = '<div class="empty">No log entries yet. Start using SkillSecurity to see activity here.</div>';
     return;
   }
 
-  el.innerHTML = logs.map(e => {
-    const d = e.decision || {};
-    const action = d.action || '?';
-    const cls = action === 'block' ? 'action-block' : action === 'ask' ? 'action-ask' : 'action-allow';
-    const reason = (d.reason || '').slice(0, 80);
-    const ts = (e.timestamp || '').slice(11, 19);
-    return `<div class="log-item">
-      <span class="log-action ${cls}">${action}</span>
-      <span class="log-reason" title="${(d.reason || '').replace(/"/g, '&quot;')}">${reason}</span>
-      <span class="log-time">${ts}</span>
-    </div>`;
+  el.innerHTML = logs.map(function(e) {
+    var d = e.decision || {};
+    var action = d.action || '?';
+    var cls = action === 'block' ? 'action-block' : action === 'ask' ? 'action-ask' : 'action-allow';
+    var reason = (d.reason || '').slice(0, 80);
+    var ts = (e.timestamp || '').slice(11, 19);
+    var safeReason = (d.reason || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    return '<div class="log-item">' +
+      '<span class="log-action ' + cls + '">' + action + '</span>' +
+      '<span class="log-reason" title="' + safeReason + '">' + reason + '</span>' +
+      '<span class="log-time">' + ts + '</span>' +
+      '</div>';
   }).join('');
 }
 
@@ -327,84 +370,113 @@ async function refreshFrameworks() {
   const frameworks = await fetchJSON('/api/frameworks');
   const el = document.getElementById('fw-list');
 
-  el.innerHTML = frameworks.map(fw => {
-    const statusCls = fw.installed ? 'fw-installed' : 'fw-missing';
-    const statusText = fw.installed ? 'Installed' : 'Not installed';
-    const toggleCls = fw.protected ? 'on' : 'off';
-    const disabled = !fw.installed ? 'disabled' : '';
-    return `<div class="fw-card">
-      <div class="fw-info">
-        <div>
-          <div class="fw-name">${fw.name}</div>
-          <span class="fw-status ${statusCls}">${statusText}</span>
-        </div>
-      </div>
-      <button class="fw-toggle ${toggleCls}" ${disabled}
-        onclick="toggleProtect('${fw.id}', ${!fw.protected})"
-        title="${fw.protected ? 'Click to unprotect' : 'Click to protect'}">
-      </button>
-    </div>`;
+  el.innerHTML = frameworks.map(function(fw) {
+    var detectCls = fw.installed ? 'fw-detected' : 'fw-undetected';
+    var detectText = fw.installed ? 'Detected' : 'Not detected';
+    var toggleCls = fw.protected ? 'on' : 'off';
+    var title = fw.protected ? 'Click to disable protection' : 'Click to enable protection';
+    return '<div class="fw-card">' +
+      '<div class="fw-info"><div>' +
+        '<div class="fw-name">' + fw.name +
+          '<span class="fw-detect ' + detectCls + '">' + detectText + '</span>' +
+        '</div>' +
+      '</div></div>' +
+      '<button class="fw-toggle ' + toggleCls + '" ' +
+        'onclick="toggleProtect(\'' + fw.id + '\', ' + (!fw.protected) + ', this)" ' +
+        'title="' + title + '">' +
+      '</button>' +
+    '</div>';
   }).join('');
 }
 
-async function toggleProtect(framework, enable) {
-  const url = enable ? '/api/protect' : '/api/unprotect';
-  await fetchJSON(url, {
+async function toggleProtect(framework, enable, btnEl) {
+  if (btnEl) btnEl.classList.add('loading');
+  var url = enable ? '/api/protect' : '/api/unprotect';
+  var result = await fetchJSON(url, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({framework}),
+    body: JSON.stringify({framework: framework}),
   });
+  if (result.ok) {
+    showToast(framework + ' ' + (enable ? 'protection enabled' : 'protection disabled'));
+  } else {
+    showToast('Error: ' + (result.error || 'unknown'), 4000);
+  }
   await refreshFrameworks();
-  await refreshStats();
+}
+
+async function loadScanPaths() {
+  var data = await fetchJSON('/api/scan/paths');
+  var el = document.getElementById('quick-paths');
+  var paths = data.paths || [];
+
+  el.innerHTML = paths.map(function(p) {
+    var dotCls = p.exists ? 'dot-green' : 'dot-gray';
+    var cls = p.exists ? 'quick-path exists' : 'quick-path';
+    var short = p.path.length > 45 ? '...' + p.path.slice(-42) : p.path;
+    return '<button class="' + cls + '" onclick="scanPath(\'' + p.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" ' +
+      'title="' + p.path.replace(/"/g, '&quot;') + (p.exists ? ' (exists)' : ' (not found)') + '">' +
+      '<span class="dot ' + dotCls + '"></span>' +
+      '<span>' + p.name + ': ' + short + '</span>' +
+    '</button>';
+  }).join('');
+}
+
+function scanPath(path) {
+  document.getElementById('scan-path').value = path;
+  doScan();
 }
 
 async function doScan() {
-  const path = document.getElementById('scan-path').value.trim();
-  if (!path) return;
-  const btn = document.getElementById('scan-btn');
-  const resultEl = document.getElementById('scan-result');
+  var path = document.getElementById('scan-path').value.trim();
+  if (!path) {
+    showToast('Please enter or select a path');
+    return;
+  }
+  var btn = document.getElementById('scan-btn');
+  var resultEl = document.getElementById('scan-result');
   btn.disabled = true;
   btn.textContent = 'Scanning...';
   resultEl.innerHTML = '';
 
-  const result = await fetchJSON('/api/scan', {
+  var result = await fetchJSON('/api/scan', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({path}),
+    body: JSON.stringify({path: path}),
   });
 
   btn.disabled = false;
   btn.textContent = 'Scan';
 
   if (!result.ok) {
-    resultEl.innerHTML = `<span style="color:var(--red)">Error: ${result.error}</span>`;
+    resultEl.innerHTML = '<span style="color:var(--red)">Error: ' + (result.error || 'unknown') + '</span>';
     return;
   }
 
-  const risk = result.risk_level || 'unknown';
-  const color = risk === 'critical' || risk === 'high' ? 'var(--red)' : risk === 'medium' ? 'var(--orange)' : 'var(--green)';
-  resultEl.innerHTML = `
-    <div style="margin-bottom:8px">Risk: <b style="color:${color}">${risk.toUpperCase()}</b>
-    &nbsp; Files: ${result.summary?.total_files || 0}
-    &nbsp; Issues: ${result.summary?.total_issues || 0}</div>
-    <pre>${JSON.stringify(result.issues || [], null, 2)}</pre>`;
+  var risk = result.risk_level || 'unknown';
+  var color = (risk === 'critical' || risk === 'high') ? 'var(--red)' : risk === 'medium' ? 'var(--orange)' : 'var(--green)';
+  var files = (result.summary && result.summary.total_files) || 0;
+  var issues = (result.summary && result.summary.total_issues) || 0;
+  resultEl.innerHTML =
+    '<div style="margin-bottom:8px">Risk: <b style="color:' + color + '">' + risk.toUpperCase() + '</b>' +
+    '&nbsp; Files: ' + files + '&nbsp; Issues: ' + issues + '</div>' +
+    '<pre>' + JSON.stringify(result.issues || [], null, 2) + '</pre>';
 }
 
-// Filter buttons
-document.querySelectorAll('.filter-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+document.querySelectorAll('.filter-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
     btn.classList.add('active');
     currentFilter = btn.dataset.action;
     refreshLogs();
   });
 });
 
-// Initial load + auto-refresh
 async function refreshAll() {
   await Promise.all([refreshStats(), refreshLogs(), refreshFrameworks()]);
 }
 refreshAll();
+loadScanPaths();
 setInterval(refreshAll, 5000);
 </script>
 </body>

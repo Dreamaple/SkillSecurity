@@ -190,6 +190,78 @@ class TestDashboardAPIScan:
         assert result["ok"] is False
 
 
+class TestDashboardAPIScanPaths:
+    def test_returns_paths_list(self) -> None:
+        api = DashboardAPI()
+        data = api.get_scan_paths()
+        assert "paths" in data
+        assert "cwd" in data
+        assert isinstance(data["paths"], list)
+        assert len(data["paths"]) > 0
+
+    def test_includes_cwd_entry(self) -> None:
+        api = DashboardAPI()
+        data = api.get_scan_paths()
+        cwd_entries = [p for p in data["paths"] if p["framework"] == "_cwd"]
+        assert len(cwd_entries) == 1
+        assert cwd_entries[0]["exists"] is True
+
+    def test_each_path_has_required_fields(self) -> None:
+        api = DashboardAPI()
+        data = api.get_scan_paths()
+        for p in data["paths"]:
+            assert "framework" in p
+            assert "name" in p
+            assert "path" in p
+            assert "exists" in p
+
+    def test_includes_mcp_paths(self) -> None:
+        api = DashboardAPI()
+        data = api.get_scan_paths()
+        mcp_paths = [p for p in data["paths"] if p["framework"] == "mcp"]
+        assert len(mcp_paths) >= 1
+
+    def test_includes_n8n_paths(self) -> None:
+        api = DashboardAPI()
+        data = api.get_scan_paths()
+        n8n_paths = [p for p in data["paths"] if p["framework"] == "n8n"]
+        assert len(n8n_paths) >= 1
+
+
+class TestDashboardAPIDetection:
+    def test_n8n_detection_uses_which(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import shutil
+
+        monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/n8n" if name == "n8n" else None)
+        api = DashboardAPI()
+        frameworks = api.get_frameworks()
+        n8n = next(f for f in frameworks if f["id"] == "n8n")
+        assert n8n["installed"] is True
+
+    def test_n8n_not_detected_when_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import shutil
+
+        monkeypatch.setattr(shutil, "which", lambda name: None)
+        api = DashboardAPI()
+        frameworks = api.get_frameworks()
+        n8n = next(f for f in frameworks if f["id"] == "n8n")
+        assert n8n["installed"] is False
+
+    def test_python_framework_detection(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import importlib.util
+
+        original = importlib.util.find_spec
+        monkeypatch.setattr(
+            importlib.util,
+            "find_spec",
+            lambda name: type("Spec", (), {})() if name == "langchain_core" else original(name),
+        )
+        api = DashboardAPI()
+        frameworks = api.get_frameworks()
+        lc = next(f for f in frameworks if f["id"] == "langchain")
+        assert lc["installed"] is True
+
+
 class TestDashboardServer:
     def test_static_file_exists(self) -> None:
         static_dir = (

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -13,12 +15,56 @@ import yaml
 
 _CONFIG_FILE = ".skillsecurity.yaml"
 _KNOWN_FRAMEWORKS = {
-    "langchain": {"name": "LangChain", "pip": "langchain-core", "import": "langchain_core"},
-    "autogen": {"name": "AutoGen", "pip": "pyautogen", "import": "autogen"},
-    "crewai": {"name": "CrewAI", "pip": "crewai", "import": "crewai"},
-    "llamaindex": {"name": "LlamaIndex", "pip": "llama-index-core", "import": "llama_index"},
-    "mcp": {"name": "MCP / OpenClaw", "pip": "mcp", "import": "mcp"},
-    "n8n": {"name": "n8n (gateway)", "pip": None, "import": None},
+    "langchain": {
+        "name": "LangChain",
+        "pip": "langchain-core",
+        "import": "langchain_core",
+        "detect": "python",
+        "skill_dirs": ["tools/", "langchain_tools/"],
+    },
+    "autogen": {
+        "name": "AutoGen",
+        "pip": "pyautogen",
+        "import": "autogen",
+        "detect": "python",
+        "skill_dirs": ["skills/", "autogen_skills/"],
+    },
+    "crewai": {
+        "name": "CrewAI",
+        "pip": "crewai",
+        "import": "crewai",
+        "detect": "python",
+        "skill_dirs": ["tools/", "crewai_tools/"],
+    },
+    "llamaindex": {
+        "name": "LlamaIndex",
+        "pip": "llama-index-core",
+        "import": "llama_index",
+        "detect": "python",
+        "skill_dirs": ["tools/", "llama_tools/"],
+    },
+    "mcp": {
+        "name": "MCP / OpenClaw",
+        "pip": "mcp",
+        "import": "mcp",
+        "detect": "python",
+        "skill_dirs": [
+            "~/.mcp/servers/",
+            "~/.config/mcp/",
+            "mcp_servers/",
+        ],
+    },
+    "n8n": {
+        "name": "n8n",
+        "pip": None,
+        "import": None,
+        "detect": "cli",
+        "cli_name": "n8n",
+        "skill_dirs": [
+            "~/.n8n/custom/",
+            "~/.n8n/nodes/",
+        ],
+    },
 }
 
 _start_time = time.time()
@@ -103,7 +149,7 @@ class DashboardAPI:
 
         result = []
         for key, meta in _KNOWN_FRAMEWORKS.items():
-            installed = self._check_installed(meta.get("import"))
+            installed = self._detect_framework(meta)
             result.append(
                 {
                     "id": key,
@@ -171,10 +217,47 @@ class DashboardAPI:
         except Exception:
             return {}
 
-    @staticmethod
-    def _check_installed(import_name: str | None) -> bool:
-        if not import_name:
-            return False
-        import importlib.util
+    def get_scan_paths(self) -> dict[str, Any]:
+        """Return default scan paths for known frameworks."""
+        cwd = os.getcwd()
+        paths: list[dict[str, Any]] = []
 
-        return importlib.util.find_spec(import_name) is not None
+        for key, meta in _KNOWN_FRAMEWORKS.items():
+            for sd in meta.get("skill_dirs", []):
+                expanded = Path(sd).expanduser()
+                if not expanded.is_absolute():
+                    expanded = Path(cwd) / expanded
+                paths.append(
+                    {
+                        "framework": key,
+                        "name": meta["name"],
+                        "path": str(expanded),
+                        "exists": expanded.exists(),
+                    }
+                )
+
+        paths.append(
+            {
+                "framework": "_cwd",
+                "name": "Current Directory",
+                "path": cwd,
+                "exists": True,
+            }
+        )
+
+        return {"paths": paths, "cwd": cwd}
+
+    @staticmethod
+    def _detect_framework(meta: dict) -> bool:
+        detect_type = meta.get("detect", "python")
+        if detect_type == "python":
+            import_name = meta.get("import")
+            if not import_name:
+                return False
+            import importlib.util
+
+            return importlib.util.find_spec(import_name) is not None
+        if detect_type == "cli":
+            cli_name = meta.get("cli_name", "")
+            return shutil.which(cli_name) is not None
+        return False
