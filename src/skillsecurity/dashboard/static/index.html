@@ -106,7 +106,7 @@ body {
   background: var(--surface2); transition: background .1s;
 }
 .fw-card:hover { background: #2a2e3e; }
-.fw-info { display: flex; align-items: center; gap: 10px; }
+.fw-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .fw-name { font-size: 13px; font-weight: 600; }
 .fw-detect {
   font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 6px;
@@ -128,6 +128,10 @@ body {
 .fw-toggle.on::after { left: 23px; }
 .fw-toggle.off::after { left: 3px; }
 .fw-toggle.loading { opacity: 0.5; pointer-events: none; }
+.fw-toggle.loading::after {
+  animation: pulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes pulse { from { opacity: 0.5; } to { opacity: 1; } }
 
 .fw-note {
   padding: 8px 16px; font-size: 11px; color: var(--text2);
@@ -148,31 +152,59 @@ body {
 }
 .btn:hover { opacity: 0.85; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-sm {
-  padding: 4px 10px; font-size: 11px; border-radius: 6px;
-  border: 1px solid var(--border); background: transparent;
-  color: var(--text2); cursor: pointer; transition: all .15s;
+.btn-outline {
+  padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  background: transparent; color: var(--accent); cursor: pointer;
+  border: 1px solid var(--accent); transition: all .15s;
 }
-.btn-sm:hover { border-color: var(--accent); color: var(--text); }
-.btn-sm.exists { border-color: var(--green); color: var(--green); }
+.btn-outline:hover { background: rgba(108,124,255,.1); }
+.btn-outline:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.quick-paths {
-  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;
+.scan-paths-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
 }
-.quick-path {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 10px; border-radius: 6px; font-size: 11px;
-  border: 1px solid var(--border); background: transparent;
-  color: var(--text2); cursor: pointer; transition: all .15s;
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+.scan-paths-header span { font-size: 12px; color: var(--text2); }
+
+.scan-path-list { margin-bottom: 12px; }
+.scan-path-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-radius: 6px; font-size: 12px; transition: background .1s;
+  cursor: pointer;
 }
-.quick-path:hover { border-color: var(--accent); color: var(--text); }
-.quick-path.exists { border-color: rgba(52,211,153,.4); }
-.quick-path .dot {
-  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+.scan-path-item:hover { background: var(--surface2); }
+.scan-path-item .path-label { color: var(--text); font-weight: 500; min-width: 70px; }
+.scan-path-item .path-value {
+  color: var(--text2); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; flex: 1; min-width: 0;
 }
-.dot-green { background: var(--green); }
-.dot-gray { background: var(--text2); }
+.scan-path-item .path-tag {
+  font-size: 10px; padding: 1px 6px; border-radius: 4px; flex-shrink: 0;
+}
+.tag-exists { color: var(--blue); background: rgba(96,165,250,.1); }
+.tag-missing { color: var(--text2); background: rgba(139,143,168,.08); }
+.tag-scanned {
+  padding: 1px 6px; border-radius: 4px; font-size: 10px; flex-shrink: 0;
+}
+.tag-safe { color: var(--green); background: rgba(52,211,153,.1); }
+.tag-risk { color: var(--red); background: rgba(248,113,113,.15); }
+.tag-med-risk { color: var(--orange); background: rgba(251,191,36,.15); }
+
+/* Progress bar */
+.progress-wrap {
+  height: 4px; background: var(--surface2); border-radius: 2px;
+  margin: 8px 0; overflow: hidden; display: none;
+}
+.progress-wrap.active { display: block; }
+.progress-bar {
+  height: 100%; background: var(--accent); border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.progress-text {
+  font-size: 11px; color: var(--text2); margin-bottom: 6px;
+  display: none;
+}
+.progress-text.active { display: block; }
 
 .scan-result { font-size: 12px; color: var(--text2); margin-top: 8px; }
 .scan-result pre {
@@ -263,27 +295,34 @@ body {
     </div>
 
     <div style="display:flex;flex-direction:column;gap:20px;">
-      <!-- Frameworks -->
       <div class="panel">
         <div class="panel-header"><span>Framework Protection</span></div>
         <div class="panel-body">
           <div class="fw-list" id="fw-list"></div>
           <div class="fw-note">
-            Tip: Protection works independently of framework installation.
-            Toggle on to pre-configure &mdash; it will activate once the framework is available.
+            Protection works independently of framework installation.
+            Toggle on to pre-configure; it activates when the framework runs.
           </div>
         </div>
       </div>
 
-      <!-- Scanner -->
       <div class="panel">
         <div class="panel-header"><span>Skill Scanner</span></div>
         <div class="panel-body">
           <div class="scan-section">
-            <div style="margin-bottom:10px;font-size:12px;color:var(--text2)">Quick scan (click a path):</div>
-            <div class="quick-paths" id="quick-paths"></div>
+            <div class="scan-paths-header">
+              <span>Known skill directories:</span>
+              <button class="btn-outline" id="scan-all-btn" onclick="scanAll()">Scan All</button>
+            </div>
+            <div class="scan-path-list" id="scan-path-list"></div>
+
+            <div class="progress-text" id="progress-text"></div>
+            <div class="progress-wrap" id="progress-wrap">
+              <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+            </div>
+
             <div class="scan-input-row">
-              <input class="scan-input" id="scan-path" placeholder="Or enter a custom path...">
+              <input class="scan-input" id="scan-path" placeholder="Or enter a custom path to scan...">
               <button class="btn" id="scan-btn" onclick="doScan()">Scan</button>
             </div>
             <div class="scan-result" id="scan-result"></div>
@@ -297,137 +336,248 @@ body {
 <div class="toast" id="toast"></div>
 
 <script>
-let currentFilter = '';
+var currentFilter = '';
+var scanResults = {};
 
 function showToast(msg, duration) {
-  const t = document.getElementById('toast');
+  var t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), duration || 2500);
+  setTimeout(function() { t.classList.remove('show'); }, duration || 2500);
 }
 
-async function fetchJSON(url, opts) {
-  const resp = await fetch(url, opts);
-  return resp.json();
+function fetchJSON(url, opts) {
+  return fetch(url, opts).then(function(r) { return r.json(); });
 }
 
-async function refreshStats() {
-  const s = await fetchJSON('/api/stats');
-  document.getElementById('stat-total').textContent = s.counts.total.toLocaleString();
-  document.getElementById('stat-block').textContent = s.counts.block.toLocaleString();
-  document.getElementById('stat-ask').textContent = s.counts.ask.toLocaleString();
-  document.getElementById('stat-allow').textContent = s.counts.allow.toLocaleString();
-  document.getElementById('uptime').textContent = 'Uptime: ' + s.uptime;
+function refreshStats() {
+  return fetchJSON('/api/stats').then(function(s) {
+    document.getElementById('stat-total').textContent = s.counts.total.toLocaleString();
+    document.getElementById('stat-block').textContent = s.counts.block.toLocaleString();
+    document.getElementById('stat-ask').textContent = s.counts.ask.toLocaleString();
+    document.getElementById('stat-allow').textContent = s.counts.allow.toLocaleString();
+    document.getElementById('uptime').textContent = 'Uptime: ' + s.uptime;
 
-  const period = s.first_event
-    ? 'Since ' + s.first_event.slice(0, 16).replace('T', ' ')
-    : 'No events yet';
-  document.getElementById('stat-period').textContent = period;
+    var period = s.first_event
+      ? 'Since ' + s.first_event.slice(0, 16).replace('T', ' ')
+      : 'No events yet';
+    document.getElementById('stat-period').textContent = period;
 
-  document.getElementById('sev-crit').textContent = s.severity.critical;
-  document.getElementById('sev-high').textContent = s.severity.high;
-  document.getElementById('sev-med').textContent = s.severity.medium;
-  document.getElementById('sev-low').textContent = s.severity.low;
+    document.getElementById('sev-crit').textContent = s.severity.critical;
+    document.getElementById('sev-high').textContent = s.severity.high;
+    document.getElementById('sev-med').textContent = s.severity.medium;
+    document.getElementById('sev-low').textContent = s.severity.low;
 
-  const total = s.severity.critical + s.severity.high + s.severity.medium + s.severity.low || 1;
-  document.getElementById('sev-bar').innerHTML = [
-    ['sev-crit', s.severity.critical],
-    ['sev-high', s.severity.high],
-    ['sev-med', s.severity.medium],
-    ['sev-low', s.severity.low],
-  ].map(([cls, v]) => v > 0 ? '<div class="' + cls + '" style="width:' + (v/total*100) + '%"></div>' : '').join('');
+    var total = s.severity.critical + s.severity.high + s.severity.medium + s.severity.low || 1;
+    document.getElementById('sev-bar').innerHTML = [
+      ['sev-crit', s.severity.critical],
+      ['sev-high', s.severity.high],
+      ['sev-med', s.severity.medium],
+      ['sev-low', s.severity.low],
+    ].map(function(a) {
+      return a[1] > 0 ? '<div class="' + a[0] + '" style="width:' + (a[1]/total*100) + '%"></div>' : '';
+    }).join('');
+  });
 }
 
-async function refreshLogs() {
-  const params = new URLSearchParams({limit: '80'});
+function refreshLogs() {
+  var params = new URLSearchParams({limit: '80'});
   if (currentFilter) params.set('action', currentFilter);
-  const logs = await fetchJSON('/api/logs?' + params);
+  return fetchJSON('/api/logs?' + params).then(function(logs) {
+    document.getElementById('log-count').textContent = logs.length + ' entries';
+    var el = document.getElementById('log-list');
 
-  document.getElementById('log-count').textContent = logs.length + ' entries';
-  const el = document.getElementById('log-list');
+    if (!logs.length) {
+      el.innerHTML = '<div class="empty">No log entries yet. Start using SkillSecurity to see activity here.</div>';
+      return;
+    }
 
-  if (!logs.length) {
-    el.innerHTML = '<div class="empty">No log entries yet. Start using SkillSecurity to see activity here.</div>';
+    el.innerHTML = logs.map(function(e) {
+      var d = e.decision || {};
+      var action = d.action || '?';
+      var cls = action === 'block' ? 'action-block' : action === 'ask' ? 'action-ask' : 'action-allow';
+      var reason = (d.reason || '').slice(0, 80);
+      var ts = (e.timestamp || '').slice(11, 19);
+      var safeReason = (d.reason || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      return '<div class="log-item">' +
+        '<span class="log-action ' + cls + '">' + action + '</span>' +
+        '<span class="log-reason" title="' + safeReason + '">' + reason + '</span>' +
+        '<span class="log-time">' + ts + '</span>' +
+        '</div>';
+    }).join('');
+  });
+}
+
+function refreshFrameworks() {
+  return fetchJSON('/api/frameworks').then(function(frameworks) {
+    var el = document.getElementById('fw-list');
+    el.innerHTML = frameworks.map(function(fw) {
+      var detectCls = fw.installed ? 'fw-detected' : 'fw-undetected';
+      var detectText = fw.installed ? 'Detected' : 'Not detected';
+      var toggleCls = fw.protected ? 'on' : 'off';
+      var title = fw.protected ? 'Click to disable protection' : 'Click to enable protection';
+      return '<div class="fw-card">' +
+        '<div class="fw-info"><div>' +
+          '<div class="fw-name">' + fw.name +
+            '<span class="fw-detect ' + detectCls + '">' + detectText + '</span>' +
+          '</div>' +
+        '</div></div>' +
+        '<button class="fw-toggle ' + toggleCls + '" ' +
+          'data-fw="' + fw.id + '" data-enable="' + (!fw.protected) + '" ' +
+          'title="' + title + '">' +
+        '</button>' +
+      '</div>';
+    }).join('');
+
+    el.querySelectorAll('.fw-toggle').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        toggleProtect(btn.dataset.fw, btn.dataset.enable === 'true', btn);
+      });
+    });
+  });
+}
+
+function toggleProtect(framework, enable, btnEl) {
+  btnEl.classList.add('loading');
+  var url = enable ? '/api/protect' : '/api/unprotect';
+  fetchJSON(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({framework: framework}),
+  }).then(function(result) {
+    if (result.ok) {
+      showToast(framework + (enable ? ' protection enabled' : ' protection disabled'));
+    } else {
+      showToast('Error: ' + (result.error || 'unknown'), 4000);
+    }
+    return refreshFrameworks();
+  });
+}
+
+var cachedPaths = [];
+
+function loadScanPaths() {
+  return fetchJSON('/api/scan/paths').then(function(data) {
+    cachedPaths = (data.paths || []).filter(function(p) { return p.exists; });
+    renderScanPaths();
+  });
+}
+
+function renderScanPaths() {
+  var el = document.getElementById('scan-path-list');
+  var allPaths = cachedPaths;
+
+  if (!allPaths.length) {
+    el.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text2)">No known skill directories found on this system.</div>';
     return;
   }
 
-  el.innerHTML = logs.map(function(e) {
-    var d = e.decision || {};
-    var action = d.action || '?';
-    var cls = action === 'block' ? 'action-block' : action === 'ask' ? 'action-ask' : 'action-allow';
-    var reason = (d.reason || '').slice(0, 80);
-    var ts = (e.timestamp || '').slice(11, 19);
-    var safeReason = (d.reason || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-    return '<div class="log-item">' +
-      '<span class="log-action ' + cls + '">' + action + '</span>' +
-      '<span class="log-reason" title="' + safeReason + '">' + reason + '</span>' +
-      '<span class="log-time">' + ts + '</span>' +
-      '</div>';
-  }).join('');
-}
+  el.innerHTML = allPaths.map(function(p) {
+    var short = p.path.length > 40 ? '...' + p.path.slice(-37) : p.path;
+    var escapedPath = p.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-async function refreshFrameworks() {
-  const frameworks = await fetchJSON('/api/frameworks');
-  const el = document.getElementById('fw-list');
+    var statusTag = '';
+    var sr = scanResults[p.path];
+    if (sr) {
+      if (!sr.ok) {
+        statusTag = '<span class="tag-scanned tag-risk">Error</span>';
+      } else {
+        var risk = sr.risk_level || 'safe';
+        if (risk === 'safe' || risk === 'low') {
+          statusTag = '<span class="tag-scanned tag-safe">Safe</span>';
+        } else if (risk === 'medium') {
+          statusTag = '<span class="tag-scanned tag-med-risk">Medium</span>';
+        } else {
+          statusTag = '<span class="tag-scanned tag-risk">' + risk.toUpperCase() + '</span>';
+        }
+      }
+    }
 
-  el.innerHTML = frameworks.map(function(fw) {
-    var detectCls = fw.installed ? 'fw-detected' : 'fw-undetected';
-    var detectText = fw.installed ? 'Detected' : 'Not detected';
-    var toggleCls = fw.protected ? 'on' : 'off';
-    var title = fw.protected ? 'Click to disable protection' : 'Click to enable protection';
-    return '<div class="fw-card">' +
-      '<div class="fw-info"><div>' +
-        '<div class="fw-name">' + fw.name +
-          '<span class="fw-detect ' + detectCls + '">' + detectText + '</span>' +
-        '</div>' +
-      '</div></div>' +
-      '<button class="fw-toggle ' + toggleCls + '" ' +
-        'onclick="toggleProtect(\'' + fw.id + '\', ' + (!fw.protected) + ', this)" ' +
-        'title="' + title + '">' +
-      '</button>' +
+    return '<div class="scan-path-item" onclick="scanSinglePath(\'' + escapedPath + '\')" ' +
+      'title="Click to scan: ' + p.path.replace(/"/g, '&quot;') + '">' +
+      '<span class="path-label">' + p.name + '</span>' +
+      '<span class="path-value">' + short + '</span>' +
+      statusTag +
     '</div>';
   }).join('');
 }
 
-async function toggleProtect(framework, enable, btnEl) {
-  if (btnEl) btnEl.classList.add('loading');
-  var url = enable ? '/api/protect' : '/api/unprotect';
-  var result = await fetchJSON(url, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({framework: framework}),
-  });
-  if (result.ok) {
-    showToast(framework + ' ' + (enable ? 'protection enabled' : 'protection disabled'));
-  } else {
-    showToast('Error: ' + (result.error || 'unknown'), 4000);
-  }
-  await refreshFrameworks();
-}
-
-async function loadScanPaths() {
-  var data = await fetchJSON('/api/scan/paths');
-  var el = document.getElementById('quick-paths');
-  var paths = data.paths || [];
-
-  el.innerHTML = paths.map(function(p) {
-    var dotCls = p.exists ? 'dot-green' : 'dot-gray';
-    var cls = p.exists ? 'quick-path exists' : 'quick-path';
-    var short = p.path.length > 45 ? '...' + p.path.slice(-42) : p.path;
-    return '<button class="' + cls + '" onclick="scanPath(\'' + p.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" ' +
-      'title="' + p.path.replace(/"/g, '&quot;') + (p.exists ? ' (exists)' : ' (not found)') + '">' +
-      '<span class="dot ' + dotCls + '"></span>' +
-      '<span>' + p.name + ': ' + short + '</span>' +
-    '</button>';
-  }).join('');
-}
-
-function scanPath(path) {
+function scanSinglePath(path) {
   document.getElementById('scan-path').value = path;
   doScan();
 }
 
-async function doScan() {
+function scanAll() {
+  var paths = cachedPaths.map(function(p) { return p.path; });
+  if (!paths.length) {
+    showToast('No scannable directories found');
+    return;
+  }
+
+  var btn = document.getElementById('scan-all-btn');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+
+  var progressText = document.getElementById('progress-text');
+  var progressWrap = document.getElementById('progress-wrap');
+  var progressBar = document.getElementById('progress-bar');
+  var resultEl = document.getElementById('scan-result');
+
+  progressText.classList.add('active');
+  progressWrap.classList.add('active');
+  progressBar.style.width = '0%';
+  resultEl.innerHTML = '';
+
+  var done = 0;
+  var total = paths.length;
+  var allResults = [];
+
+  function next(i) {
+    if (i >= total) {
+      btn.disabled = false;
+      btn.textContent = 'Scan All';
+      progressText.textContent = 'Scan complete: ' + total + '/' + total + ' directories';
+
+      var issues = 0;
+      var riskyPaths = [];
+      allResults.forEach(function(r) {
+        if (r.ok && r.summary) issues += (r.summary.total_issues || 0);
+        if (r.ok && r.risk_level && r.risk_level !== 'safe' && r.risk_level !== 'low') {
+          riskyPaths.push(r.path + ' (' + r.risk_level + ')');
+        }
+      });
+
+      if (riskyPaths.length) {
+        resultEl.innerHTML = '<div style="margin-bottom:6px;color:var(--orange)">Found issues in ' +
+          riskyPaths.length + ' directories:</div>' +
+          '<pre>' + riskyPaths.join('\n') + '</pre>';
+      } else {
+        resultEl.innerHTML = '<div style="color:var(--green)">All ' + total + ' directories scanned. No significant risks found.</div>';
+      }
+
+      renderScanPaths();
+      return;
+    }
+
+    progressText.textContent = 'Scanning ' + (i + 1) + ' / ' + total + ': ' +
+      (paths[i].length > 50 ? '...' + paths[i].slice(-47) : paths[i]);
+    progressBar.style.width = ((i + 1) / total * 100) + '%';
+
+    fetchJSON('/api/scan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path: paths[i]}),
+    }).then(function(result) {
+      allResults.push(result);
+      scanResults[paths[i]] = result;
+      next(i + 1);
+    });
+  }
+
+  next(0);
+}
+
+function doScan() {
   var path = document.getElementById('scan-path').value.trim();
   if (!path) {
     showToast('Please enter or select a path');
@@ -439,28 +589,31 @@ async function doScan() {
   btn.textContent = 'Scanning...';
   resultEl.innerHTML = '';
 
-  var result = await fetchJSON('/api/scan', {
+  fetchJSON('/api/scan', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({path: path}),
+  }).then(function(result) {
+    btn.disabled = false;
+    btn.textContent = 'Scan';
+
+    scanResults[path] = result;
+    renderScanPaths();
+
+    if (!result.ok) {
+      resultEl.innerHTML = '<span style="color:var(--red)">Error: ' + (result.error || 'unknown') + '</span>';
+      return;
+    }
+
+    var risk = result.risk_level || 'unknown';
+    var color = (risk === 'critical' || risk === 'high') ? 'var(--red)' : risk === 'medium' ? 'var(--orange)' : 'var(--green)';
+    var files = (result.summary && result.summary.total_files) || 0;
+    var issues = (result.summary && result.summary.total_issues) || 0;
+    resultEl.innerHTML =
+      '<div style="margin-bottom:8px">Risk: <b style="color:' + color + '">' + risk.toUpperCase() + '</b>' +
+      '&nbsp; Files: ' + files + '&nbsp; Issues: ' + issues + '</div>' +
+      '<pre>' + JSON.stringify(result.issues || [], null, 2) + '</pre>';
   });
-
-  btn.disabled = false;
-  btn.textContent = 'Scan';
-
-  if (!result.ok) {
-    resultEl.innerHTML = '<span style="color:var(--red)">Error: ' + (result.error || 'unknown') + '</span>';
-    return;
-  }
-
-  var risk = result.risk_level || 'unknown';
-  var color = (risk === 'critical' || risk === 'high') ? 'var(--red)' : risk === 'medium' ? 'var(--orange)' : 'var(--green)';
-  var files = (result.summary && result.summary.total_files) || 0;
-  var issues = (result.summary && result.summary.total_issues) || 0;
-  resultEl.innerHTML =
-    '<div style="margin-bottom:8px">Risk: <b style="color:' + color + '">' + risk.toUpperCase() + '</b>' +
-    '&nbsp; Files: ' + files + '&nbsp; Issues: ' + issues + '</div>' +
-    '<pre>' + JSON.stringify(result.issues || [], null, 2) + '</pre>';
 }
 
 document.querySelectorAll('.filter-btn').forEach(function(btn) {
@@ -472,8 +625,8 @@ document.querySelectorAll('.filter-btn').forEach(function(btn) {
   });
 });
 
-async function refreshAll() {
-  await Promise.all([refreshStats(), refreshLogs(), refreshFrameworks()]);
+function refreshAll() {
+  return Promise.all([refreshStats(), refreshLogs(), refreshFrameworks()]);
 }
 refreshAll();
 loadScanPaths();

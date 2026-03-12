@@ -67,6 +67,12 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             skill_path = body.get("path", "")
             result = self.api.scan_skill(skill_path)
             self._json_response(result)
+        elif path == "/api/scan/batch":
+            paths = body.get("paths", [])
+            results = []
+            for p in paths:
+                results.append(self.api.scan_skill(p))
+            self._json_response({"results": results, "total": len(results)})
         else:
             self.send_error(404)
 
@@ -89,6 +95,12 @@ class _DashboardHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
         self.wfile.write(content)
+
+    def handle_one_request(self) -> None:
+        try:
+            super().handle_one_request()
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            self.close_connection = True
 
     def log_message(self, format: str, *args: Any) -> None:
         logger.debug(format, *args)

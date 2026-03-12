@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -172,23 +170,31 @@ class DashboardAPI:
         }
 
     def protect_framework(self, framework: str, policy: str | None = None) -> dict[str, Any]:
-        """Enable protection for a framework."""
+        """Enable protection for a framework by directly updating config."""
         if framework not in _KNOWN_FRAMEWORKS:
             return {"ok": False, "error": f"Unknown framework: {framework}"}
         try:
-            cmd = [sys.executable, "-m", "skillsecurity", "protect", framework]
+            config = self._read_config()
+            auto_protect = config.get("auto_protect", [])
+            if framework not in auto_protect:
+                auto_protect.append(framework)
+            config["auto_protect"] = auto_protect
             if policy:
-                cmd.extend(["--policy", policy])
-            subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
+                config["policy_file"] = policy
+            self._write_config(config)
             return {"ok": True, "framework": framework, "action": "protected"}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     def unprotect_framework(self, framework: str) -> dict[str, Any]:
-        """Disable protection for a framework."""
+        """Disable protection for a framework by directly updating config."""
         try:
-            cmd = [sys.executable, "-m", "skillsecurity", "unprotect", framework]
-            subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
+            config = self._read_config()
+            auto_protect = config.get("auto_protect", [])
+            if framework in auto_protect:
+                auto_protect.remove(framework)
+            config["auto_protect"] = auto_protect
+            self._write_config(config)
             return {"ok": True, "framework": framework, "action": "unprotected"}
         except Exception as e:
             return {"ok": False, "error": str(e)}
@@ -196,26 +202,15 @@ class DashboardAPI:
     def scan_skill(self, skill_path: str) -> dict[str, Any]:
         """Scan a skill directory."""
         if not skill_path or not Path(skill_path).exists():
-            return {"ok": False, "error": "Invalid path"}
+            return {"ok": False, "error": f"Path not found: {skill_path}"}
         try:
             from skillsecurity import SkillGuard
 
             guard = SkillGuard()
             report = guard.scan_skill(skill_path)
-            return {"ok": True, **report}
+            return {"ok": True, "path": skill_path, **report}
         except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    @staticmethod
-    def _read_config() -> dict:
-        p = Path(_CONFIG_FILE)
-        if not p.exists():
-            return {}
-        try:
-            data = yaml.safe_load(p.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
-        except Exception:
-            return {}
+            return {"ok": False, "error": str(e), "path": skill_path}
 
     def get_scan_paths(self) -> dict[str, Any]:
         """Return default scan paths for known frameworks."""
@@ -246,6 +241,24 @@ class DashboardAPI:
         )
 
         return {"paths": paths, "cwd": cwd}
+
+    @staticmethod
+    def _read_config() -> dict:
+        p = Path(_CONFIG_FILE)
+        if not p.exists():
+            return {}
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _write_config(config: dict) -> None:
+        p = Path(_CONFIG_FILE)
+        p.write_text(
+            yaml.dump(config, default_flow_style=False, allow_unicode=True), encoding="utf-8"
+        )
 
     @staticmethod
     def _detect_framework(meta: dict) -> bool:

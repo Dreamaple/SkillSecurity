@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -163,19 +162,51 @@ class TestDashboardAPIProtect:
         result = api.protect_framework("nonexistent")
         assert result["ok"] is False
 
-    @patch("subprocess.run")
-    def test_protect_calls_cli(self, mock_run: object) -> None:
+    def test_protect_writes_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
         api = DashboardAPI()
         result = api.protect_framework("langchain")
         assert result["ok"] is True
         assert result["action"] == "protected"
+        config = api._read_config()
+        assert "langchain" in config["auto_protect"]
 
-    @patch("subprocess.run")
-    def test_unprotect_calls_cli(self, mock_run: object) -> None:
+    def test_protect_idempotent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
         api = DashboardAPI()
+        api.protect_framework("langchain")
+        api.protect_framework("langchain")
+        config = api._read_config()
+        assert config["auto_protect"].count("langchain") == 1
+
+    def test_unprotect_removes_from_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        api = DashboardAPI()
+        api.protect_framework("langchain")
+        api.protect_framework("mcp")
         result = api.unprotect_framework("langchain")
         assert result["ok"] is True
-        assert result["action"] == "unprotected"
+        config = api._read_config()
+        assert "langchain" not in config["auto_protect"]
+        assert "mcp" in config["auto_protect"]
+
+    def test_unprotect_missing_is_ok(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        api = DashboardAPI()
+        result = api.unprotect_framework("crewai")
+        assert result["ok"] is True
+
+    def test_protect_then_get_frameworks_shows_protected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        api = DashboardAPI()
+        api.protect_framework("mcp")
+        frameworks = api.get_frameworks()
+        mcp = next(f for f in frameworks if f["id"] == "mcp")
+        assert mcp["protected"] is True
 
 
 class TestDashboardAPIScan:
