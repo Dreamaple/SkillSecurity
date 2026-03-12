@@ -488,3 +488,29 @@ def validate(policy_file: str) -> None:
         click.echo(f"Policy file invalid: {policy_file}", err=True)
         click.echo(f"  Error: {e}", err=True)
         raise SystemExit(3) from e
+
+
+@cli.command("dashboard")
+@click.option("--host", default="127.0.0.1", help="Bind address")
+@click.option("--port", default=9099, help="Port number")
+@click.option("--log-path", default="./logs/skillsecurity-audit.jsonl", help="Audit log file")
+@click.option("--no-browser", is_flag=True, help="Don't open browser automatically")
+def dashboard_cmd(host: str, port: int, log_path: str, no_browser: bool) -> None:
+    """Launch the SkillSecurity visual dashboard.
+
+    \b
+    Opens a web-based dashboard showing:
+      - Real-time defense statistics
+      - Recent security logs
+      - Framework protection status (with toggle on/off)
+      - Skill code scanner
+
+    \b
+    Examples:
+        skillsecurity dashboard
+        skillsecurity dashboard --port 8080
+        skillsecurity dashboard --no-browser
+    """
+    from skillsecurity.dashboard.server import run_dashboard
+
+    run_dashboard(host=host, port=port, log_path=log_path, open_browser=not no_browser)

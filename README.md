@@ -8,7 +8,7 @@
     <a href="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml"><img src="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue" alt="Python">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
-    <img src="https://img.shields.io/badge/tests-327%20passed-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-358%20passed-brightgreen" alt="Tests">
   </p>
   <p align="center">
     <a href="README_zh.md">中文文档</a> · <a href="docs/how-it-works.md">Design Principles</a> · <a href="docs/threat-model.md">Threat Model</a>
@@ -78,7 +78,23 @@ SkillSecurity sits between the Agent and the tools, enforcing security policies 
 | **Framework Plugins** | One-line integration for LangChain, AutoGen, CrewAI, LlamaIndex, MCP/OpenClaw, n8n |
 | **Hot Reload** | Update security policies without restarting your application |
 | **Self-Protection** | SkillSecurity's own config files cannot be tampered with by agents |
-| **CLI Tool** | `skillsecurity check`, `scan`, `validate`, `init`, `log` commands |
+| **Visual Dashboard** | Web UI for monitoring, log browsing, framework toggling, and skill scanning |
+| **CLI Tool** | `skillsecurity check`, `scan`, `validate`, `init`, `log`, `dashboard` commands |
+
+## Visual Dashboard
+
+```bash
+skillsecurity dashboard
+```
+
+Opens a real-time web dashboard (127.0.0.1:9099) with:
+
+- **Live stats** — total checks, blocks, severity distribution
+- **Defense log viewer** — filter by action (block/ask/allow), newest first
+- **Framework toggles** — see which frameworks are installed & protected, toggle on/off with one click
+- **Skill scanner** — paste a path, scan for dangerous patterns instantly
+
+Zero extra dependencies. Pure Python stdlib `http.server` + a single HTML file. The dashboard adds ~30KB to the package.
 
 ## Quick Start
 
@@ -348,15 +364,16 @@ src/skillsecurity/
 │   ├── financial.py     #   Financial operation detection
 │   └── domains.py       #   Domain intelligence / trust levels
 ├── integrations/        # Framework adapters (LangChain, AutoGen, CrewAI, LlamaIndex, MCP, n8n)
+├── dashboard/           # Visual web dashboard (server + single-file HTML UI)
 ├── config/              # Configuration (defaults, loader, hot-reload watcher)
 ├── manifest/            # Skill permission manifests
 ├── scanner/             # Static code scanner
 ├── audit/               # Audit logging (logger, redactor, rotation, query)
 ├── selfprotect/         # Self-protection guard
-└── cli/                 # CLI commands (check, scan, init, validate, log)
+└── cli/                 # CLI commands (check, scan, init, validate, log, dashboard)
 
 policies/                # Built-in policy templates (default, strict, development)
-tests/                   # 317 tests (unit + integration)
+tests/                   # 346 tests (unit + integration)
 docs/                    # Design docs, threat model, architecture
 ```
 

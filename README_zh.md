@@ -8,7 +8,7 @@
     <a href="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml"><img src="https://github.com/Dreamaple/SkillSecurity/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue" alt="Python">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
-    <img src="https://img.shields.io/badge/tests-327%20passed-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-358%20passed-brightgreen" alt="Tests">
   </p>
   <p align="center">
     <a href="README.md">English</a> · <a href="docs/how-it-works.md">设计原理</a> · <a href="docs/threat-model.md">威胁模型</a>
@@ -78,7 +78,23 @@ SkillSecurity 插在 Agent 和工具之间，以 < 10ms 的延迟实时执行安
 | **一键框架集成** | LangChain、AutoGen、CrewAI、LlamaIndex、MCP/OpenClaw、n8n 一行接入 |
 | **热加载** | 修改策略文件无需重启应用，实时生效 |
 | **自我保护** | SkillSecurity 自身的配置文件不允许被 Agent 篡改 |
-| **CLI 工具** | `skillsecurity check`、`scan`、`validate`、`init`、`log` 命令 |
+| **可视化面板** | Web 界面实时监控、日志浏览、框架开关、Skill 扫描 |
+| **CLI 工具** | `skillsecurity check`、`scan`、`validate`、`init`、`log`、`dashboard` 命令 |
+
+## 可视化 Dashboard
+
+```bash
+skillsecurity dashboard
+```
+
+启动后自动打开浏览器，访问 127.0.0.1:9099：
+
+- **实时统计** — 总检查次数、拦截次数、严重等级分布
+- **防御日志查看器** — 按操作类型筛选（拦截/需确认/放行），最新优先
+- **框架保护开关** — 一眼看到哪些框架已安装、是否受保护，一键开关
+- **Skill 扫描器** — 输入路径即可扫描危险模式
+
+零额外依赖。纯 Python 标准库 `http.server` + 单个 HTML 文件，仅增加约 30KB 体积。
 
 ## 快速开始
 
@@ -373,15 +389,16 @@ src/skillsecurity/
 │   ├── financial.py     #   财务操作识别器
 │   └── domains.py       #   域名信誉库
 ├── integrations/        # 框架适配器（LangChain, AutoGen, CrewAI, LlamaIndex, MCP, n8n）
+├── dashboard/           # 可视化 Web 面板（服务器 + 单文件 HTML UI）
 ├── config/              # 配置（默认值、加载器、热加载监听器）
 ├── manifest/            # Skill 权限清单
 ├── scanner/             # 静态代码扫描器
 ├── audit/               # 审计日志（记录、脱敏、轮转、查询）
 ├── selfprotect/         # 自我保护机制
-└── cli/                 # CLI 命令（check, scan, init, validate, log）
+└── cli/                 # CLI 命令（check, scan, init, validate, log, dashboard）
 
 policies/                # 内置策略模板（default, strict, development）
-tests/                   # 317 个测试（单元测试 + 集成测试）
+tests/                   # 346 个测试（单元测试 + 集成测试）
 docs/                    # 设计文档、威胁模型、架构概述
 ```
 
