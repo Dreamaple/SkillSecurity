@@ -141,6 +141,18 @@ class TestToolTypeFiltering:
         matcher = RuleMatcher([rule])
         assert matcher.match(call) is not None
 
+    def test_unconditional_rule_matches_by_tool_type(self):
+        rule = Rule(
+            id="allow-all-file-read",
+            action=Action.ALLOW,
+            tool_type="file.read",
+        )
+        call = ToolCall(tool_type=ToolType.FILE_READ, params={"path": "/tmp/readme.txt"})
+        matcher = RuleMatcher([rule])
+        result = matcher.match(call)
+        assert result is not None
+        assert result.id == "allow-all-file-read"
+
 
 class TestRateLimit:
     def test_rate_limit_blocks_after_exceeding(self):

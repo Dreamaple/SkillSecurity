@@ -27,6 +27,8 @@ class CallContext:
     session_id: str | None = None
     skill_id: str | None = None
     user_id: str | None = None
+    caller_role: str | None = None
+    caller_scopes: tuple[str, ...] = ()
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -44,7 +46,8 @@ class ToolCall:
         """Create a ToolCall from a raw dictionary (as received from the public API).
 
         The dict must contain a "tool" key. Other keys are mapped to params.
-        Optional keys: skill_id, agent_id, session_id, user_id are extracted into context.
+        Optional keys: skill_id, agent_id, session_id, user_id, caller_role, caller_scopes
+        are extracted into context.
         """
         tool_raw = data.get("tool", "")
         try:
@@ -54,8 +57,17 @@ class ToolCall:
                 ToolType(tool_raw) if tool_raw in ToolType._value2member_map_ else ToolType.SHELL
             )
 
-        context_keys = {"skill_id", "agent_id", "session_id", "user_id"}
+        context_keys = {"skill_id", "agent_id", "session_id", "user_id", "caller_role"}
         context_data = {k: v for k, v in data.items() if k in context_keys}
+
+        scopes_raw = data.get("caller_scopes", data.get("scope"))
+        scopes: tuple[str, ...] = ()
+        if isinstance(scopes_raw, str):
+            scopes = tuple(s.strip() for s in scopes_raw.split(",") if s.strip())
+        elif isinstance(scopes_raw, list):
+            scopes = tuple(str(s).strip() for s in scopes_raw if str(s).strip())
+        if scopes:
+            context_data["caller_scopes"] = scopes
         context = CallContext(**context_data)
 
         param_keys = set(data.keys()) - {"tool"} - context_keys

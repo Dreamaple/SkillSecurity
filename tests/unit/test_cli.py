@@ -83,6 +83,17 @@ class TestInitCommand:
         assert result.exit_code == 0
         assert "strict" in out.read_text(encoding="utf-8")
 
+    def test_init_openclaw_hardened_template(self, tmp_path):
+        runner = CliRunner()
+        out = tmp_path / "openclaw-hardened.yaml"
+        result = runner.invoke(
+            cli, ["init", "--template", "openclaw-hardened", "--output", str(out)]
+        )
+        assert result.exit_code == 0
+        text = out.read_text(encoding="utf-8")
+        assert "openclaw-hardened" in text
+        assert "default_action: block" in text
+
     def test_init_refuses_overwrite(self, tmp_path):
         out = tmp_path / "exists.yaml"
         out.write_text("existing")

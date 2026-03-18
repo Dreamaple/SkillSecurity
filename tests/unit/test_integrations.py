@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from skillsecurity.integrations._registry import (
@@ -121,3 +123,80 @@ class TestMCPAdapter:
             secured("read_file", {"path": "/tmp/readme.txt"})
         )
         assert result == "executed"
+
+    def test_wrap_mcp_handler_uses_hardened_defaults(self) -> None:
+        import asyncio
+
+        from skillsecurity.integrations.mcp import wrap_mcp_handler
+
+        async def dummy_handler(name: str, arguments: dict | None = None) -> str:
+            return "executed"
+
+        secured = wrap_mcp_handler(dummy_handler)
+
+        with pytest.raises(RuntimeError, match="Requires confirmation"):
+            asyncio.get_event_loop().run_until_complete(secured("bash", {"command": "python -V"}))
+
+    def test_wrap_mcp_handler_returns_unified_approval_payload(self) -> None:
+        import asyncio
+
+        from skillsecurity.integrations.mcp import wrap_mcp_handler
+
+        async def dummy_handler(name: str, arguments: dict | None = None) -> str:
+            return "executed"
+
+        secured = wrap_mcp_handler(dummy_handler)
+
+        with pytest.raises(RuntimeError) as exc:
+            asyncio.get_event_loop().run_until_complete(secured("bash", {"command": "python -V"}))
+
+        lines = str(exc.value).splitlines()
+        payload = json.loads(lines[-1])
+        assert payload["status"] == "pending_approval"
+        assert payload["protocol"] == "skillsecurity.approval.v1"
+        assert payload["ticket_id"]
+
+
+class TestLlamaIndexAdapter:
+    def test_llamaindex_ask_is_not_auto_allowed(self, monkeypatch) -> None:
+        import sys
+        import types
+
+        from skillsecurity.integrations import llamaindex
+
+        class FakeToolOutput:
+            def __init__(self, content: str, tool_name: str, raw_input: dict, raw_output: str) -> None:
+                self.content = content
+                self.tool_name = tool_name
+                self.raw_input = raw_input
+                self.raw_output = raw_output
+
+        class FakeFunctionTool:
+            def __init__(self, name: str = "shell_tool") -> None:
+                self._name = name
+                self.metadata = types.SimpleNamespace(name=name)
+
+            def call(self, *args, **kwargs):
+                return "executed"
+
+        fake_tools = types.ModuleType("llama_index.core.tools")
+        fake_tools.FunctionTool = FakeFunctionTool
+        fake_tools.ToolOutput = FakeToolOutput
+
+        fake_core = types.ModuleType("llama_index.core")
+        fake_core.tools = fake_tools
+
+        fake_root = types.ModuleType("llama_index")
+        fake_root.core = fake_core
+
+        monkeypatch.setitem(sys.modules, "llama_index", fake_root)
+        monkeypatch.setitem(sys.modules, "llama_index.core", fake_core)
+        monkeypatch.setitem(sys.modules, "llama_index.core.tools", fake_tools)
+
+        llamaindex.install(policy="openclaw-hardened")
+        tool = FakeFunctionTool()
+        result = tool.call(command="python -V")
+        llamaindex.uninstall()
+
+        assert isinstance(result, FakeToolOutput)
+        assert "Requires confirmation" in result.content

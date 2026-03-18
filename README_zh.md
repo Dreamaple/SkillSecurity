@@ -188,6 +188,27 @@ skillsecurity validate my-policy.yaml
 
 # 查询审计日志
 skillsecurity log --action block --limit 20
+
+# 供应链扫描（SBOM + 漏洞馈送 + 来源信任检查）
+skillsecurity supplychain ./my-skill/ --vuln-feed ./vuln-feed.json --allow-domain github.com
+
+# 同步 OpenClaw 官方安全通告
+skillsecurity intel-sync --output ./docs/security-intel/openclaw-advisories.json
+
+# 计算规则效果指标（基于审计日志）
+skillsecurity metrics --log-path ./logs/skillsecurity-audit.jsonl
+
+# 查看待审批队列
+skillsecurity approval list
+skillsecurity approval --api-url http://127.0.0.1:9099 list
+
+# 通过/拒绝一个审批票据
+skillsecurity approval approve appr-1234567890abcdef --scope session --approver alice
+skillsecurity approval deny appr-1234567890abcdef --scope once --approver alice
+
+# 查看/撤销记忆决策
+skillsecurity approval list --remembered
+skillsecurity approval revoke mem-1234567890abcdef
 ```
 
 ## 自定义安全策略
@@ -234,6 +255,7 @@ guard = SkillGuard(policy_file="skillsecurity.yaml")
 | `default` | allow | 日常使用——拦截已知危险模式，其他放行 |
 | `strict` | block | 生产环境——仅白名单操作放行，其他全部拦截或询问 |
 | `development` | allow | 本地开发——只拦截最致命的操作 |
+| `openclaw-hardened` | block | OpenClaw/MCP 加固——默认拒绝并启用更强防护 |
 
 ### 隐私保护配置
 
@@ -397,7 +419,7 @@ src/skillsecurity/
 ├── selfprotect/         # 自我保护机制
 └── cli/                 # CLI 命令（check, scan, init, validate, log, dashboard）
 
-policies/                # 内置策略模板（default, strict, development）
+policies/                # 内置策略模板（default, strict, development, openclaw-hardened）
 tests/                   # 346 个测试（单元测试 + 集成测试）
 docs/                    # 设计文档、威胁模型、架构概述
 ```

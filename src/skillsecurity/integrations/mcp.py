@@ -13,7 +13,11 @@ from __future__ import annotations
 import functools
 from typing import Any
 
-from skillsecurity.integrations._base import _get_or_create_guard
+from skillsecurity.integrations._base import (
+    _build_pending_approval_payload,
+    _format_pending_approval_message,
+    _get_or_create_guard,
+)
 
 _originals: dict[str, Any] = {}
 _guard: Any = None
@@ -43,6 +47,15 @@ _MCP_TOOL_MAP: dict[str, str] = {
 }
 
 
+def _apply_openclaw_default_policy(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Use hardened defaults for MCP/OpenClaw unless user explicitly overrides."""
+    if any(k in kwargs for k in ("guard", "policy", "policy_file", "config")):
+        return kwargs
+    merged = dict(kwargs)
+    merged["policy"] = "openclaw-hardened"
+    return merged
+
+
 def install(**kwargs: Any) -> None:
     """Patch MCP server's call_tool handler with security checks.
 
@@ -50,7 +63,7 @@ def install(**kwargs: Any) -> None:
     For custom MCP implementations, use the `wrap_mcp_handler` helper.
     """
     global _guard
-    _guard = _get_or_create_guard(**kwargs)
+    _guard = _get_or_create_guard(**_apply_openclaw_default_policy(kwargs))
 
     try:
         from mcp.server import Server
@@ -64,17 +77,18 @@ def install(**kwargs: Any) -> None:
             async def secured_call_tool(self: Any, name: str, arguments: dict | None = None) -> Any:
                 args = arguments or {}
                 tool_type = _MCP_TOOL_MAP.get(name, "shell")
-                decision = _guard.check({"tool": tool_type, "tool_name": name, **args})
+                tool_call = {"tool": tool_type, "tool_name": name, **args}
+                decision = _guard.check(tool_call)
                 if decision.is_blocked:
                     return [{"type": "text", "text": f"[SkillSecurity] Blocked: {decision.reason}"}]
                 if decision.needs_confirmation:
+                    payload = _build_pending_approval_payload(
+                        _guard, tool_call, decision, source="mcp"
+                    )
                     return [
                         {
                             "type": "text",
-                            "text": (
-                                f"[SkillSecurity] Requires confirmation: {decision.reason}\n"
-                                f"Suggestions: {'; '.join(decision.suggestions)}"
-                            ),
+                            "text": _format_pending_approval_message(payload),
                         }
                     ]
                 return await original_call_tool(self, name, arguments)
@@ -108,17 +122,19 @@ def wrap_mcp_handler(handler: Any, **kwargs: Any) -> Any:
 
         my_tool_handler = wrap_mcp_handler(my_tool_handler, policy_file="policy.yaml")
     """
-    guard = _get_or_create_guard(**kwargs)
+    guard = _get_or_create_guard(**_apply_openclaw_default_policy(kwargs))
 
     @functools.wraps(handler)
     async def secured_handler(name: str, arguments: dict | None = None, **kw: Any) -> Any:
         args = arguments or {}
         tool_type = _MCP_TOOL_MAP.get(name, "shell")
-        decision = guard.check({"tool": tool_type, "tool_name": name, **args})
+        tool_call = {"tool": tool_type, "tool_name": name, **args}
+        decision = guard.check(tool_call)
         if decision.is_blocked:
             raise RuntimeError(f"[SkillSecurity] Blocked: {decision.reason}")
         if decision.needs_confirmation:
-            raise RuntimeError(f"[SkillSecurity] Requires confirmation: {decision.reason}")
+            payload = _build_pending_approval_payload(guard, tool_call, decision, source="mcp")
+            raise RuntimeError(_format_pending_approval_message(payload))
         return await handler(name, arguments, **kw)
 
     secured_handler._skillsecurity_original = handler  # type: ignore[attr-defined]

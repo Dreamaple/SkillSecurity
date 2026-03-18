@@ -33,6 +33,19 @@ rules:
       - "Use a precise file path instead"
       - "List files first with: dir <path>"
 
+  # ──────────────── Command Injection ────────────────
+
+  - id: "block-command-injection-metachar"
+    tool_type: shell
+    match:
+      command_pattern: "(?<!\\\\)(;|&&|\\|\\||`|\\$\\()"
+    action: block
+    severity: critical
+    message: "Potential command injection metacharacters detected"
+    suggestions:
+      - "Avoid command chaining and command substitution in tool calls"
+      - "Use structured tool parameters instead of shell concatenation"
+
   # ──────────────── Remote Code Execution ────────────────
 
   - id: "block-pipe-to-shell"
@@ -54,6 +67,26 @@ rules:
     message: "PowerShell remote code execution detected"
     suggestions:
       - "Download and review the script before executing"
+
+  - id: "block-download-to-sensitive-path-unix"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)(curl|wget)\\s+.*(-o|--output|-O)\\s+['\"]?(/etc|/System|/boot|/sbin|/usr/sbin|/root|~/.ssh|~/.aws|~/.gnupg)"
+    action: block
+    severity: critical
+    message: "Download to sensitive system/credential path blocked"
+    suggestions:
+      - "Download files into a temporary non-system path first"
+
+  - id: "block-download-to-sensitive-path-windows"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)(curl|wget)\\s+.*(-o|--output|-O)\\s+['\"]?[a-zA-Z]:\\\\(Windows|Program Files)"
+    action: block
+    severity: critical
+    message: "Download to sensitive Windows path blocked"
+    suggestions:
+      - "Download files into a temporary non-system path first"
 
   # ──────────────── Disk Operations ────────────────
 
@@ -124,6 +157,21 @@ rules:
     suggestions:
       - "Do not modify Windows system directories directly"
 
+  # ──────────────── Path Traversal ────────────────
+
+  - id: "block-path-traversal"
+    tool_type:
+      - file.read
+      - file.write
+      - file.delete
+    match:
+      path_pattern: "(?i)(\\.\\./|\\.\\.\\\\|%2e%2e|%252e%252e)"
+    action: block
+    severity: high
+    message: "Path traversal pattern detected"
+    suggestions:
+      - "Use normalized absolute paths under allowed directories only"
+
   # ──────────────── Credential Files ────────────────
 
   - id: "block-credential-files"
@@ -184,6 +232,18 @@ rules:
     suggestions:
       - "Use environment variables or config files for secrets"
       - "Never embed secrets directly in commands"
+
+  # ──────────────── Suspicious URL Blocking ────────────────
+
+  - id: "block-suspicious-url-direct"
+    tool_type: network.request
+    match:
+      url_pattern: "(?i)(ngrok\\.io|serveo\\.net|localtunnel\\.me|requestbin\\.com|webhook\\.site|pipedream\\.net|requestcatcher\\.com)"
+    action: block
+    severity: high
+    message: "Request to suspicious domain blocked"
+    suggestions:
+      - "Use trusted domains or explicit allowlist entries"
 
   # ──────────────── Reverse Shells ────────────────
 

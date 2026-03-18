@@ -138,6 +138,47 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.approval-list { padding: 10px; max-height: 230px; overflow-y: auto; }
+.approval-item {
+  background: var(--surface2); border-radius: 8px; padding: 10px; margin-bottom: 8px;
+  border: 1px solid var(--border);
+}
+.approval-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  margin-bottom: 6px;
+}
+.approval-sev {
+  font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;
+}
+.sev-critical { background: rgba(248,113,113,.2); color: var(--red); }
+.sev-high { background: rgba(251,191,36,.2); color: var(--orange); }
+.sev-medium { background: rgba(96,165,250,.2); color: var(--blue); }
+.sev-low { background: rgba(52,211,153,.2); color: var(--green); }
+.approval-tool { font-size: 12px; font-weight: 600; color: var(--text); }
+.approval-reason { font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+.approval-meta { font-size: 11px; color: var(--text2); margin-bottom: 8px; }
+.approval-actions { display: flex; gap: 6px; }
+.approval-btn {
+  flex: 1; border: 1px solid var(--border); border-radius: 6px;
+  background: transparent; color: var(--text); font-size: 11px; padding: 5px 6px; cursor: pointer;
+}
+.approval-btn.allow { border-color: rgba(52,211,153,.5); color: var(--green); }
+.approval-btn.deny { border-color: rgba(248,113,113,.5); color: var(--red); }
+.approval-btn:hover { background: rgba(255,255,255,.04); }
+
+.remember-wrap { border-top: 1px solid var(--border); padding: 8px 10px; }
+.remember-title { font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+.remember-list { max-height: 120px; overflow-y: auto; }
+.remember-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  background: var(--surface2); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px;
+}
+.remember-text { font-size: 11px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remember-revoke {
+  border: 1px solid rgba(248,113,113,.4); color: var(--red);
+  background: transparent; border-radius: 5px; font-size: 10px; padding: 3px 6px; cursor: pointer;
+}
+
 .scan-section { padding: 16px 20px; }
 .scan-input-row { display: flex; gap: 8px; margin-bottom: 8px; }
 .scan-input {
@@ -307,6 +348,20 @@ body {
       </div>
 
       <div class="panel">
+        <div class="panel-header">
+          <span>Approval Queue</span>
+          <span style="font-size:12px;color:var(--text2)" id="approval-count">0 pending</span>
+        </div>
+        <div class="panel-body">
+          <div class="approval-list" id="approval-list"></div>
+          <div class="remember-wrap">
+            <div class="remember-title">Remembered decisions</div>
+            <div class="remember-list" id="remember-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
         <div class="panel-header"><span>Skill Scanner</span></div>
         <div class="panel-body">
           <div class="scan-section">
@@ -451,6 +506,112 @@ function toggleProtect(framework, enable, btnEl) {
       showToast('Error: ' + (result.error || 'unknown'), 4000);
     }
     return refreshFrameworks();
+  });
+}
+
+function severityClass(sev) {
+  if (sev === 'critical') return 'sev-critical';
+  if (sev === 'high') return 'sev-high';
+  if (sev === 'medium') return 'sev-medium';
+  return 'sev-low';
+}
+
+function refreshApprovals() {
+  return Promise.all([
+    fetchJSON('/api/approvals/pending?limit=30'),
+    fetchJSON('/api/approvals/remembered?limit=20')
+  ]).then(function(results) {
+    var pending = results[0] || [];
+    var remembered = results[1] || [];
+    var countEl = document.getElementById('approval-count');
+    var listEl = document.getElementById('approval-list');
+    var rememberEl = document.getElementById('remember-list');
+
+    countEl.textContent = pending.length + ' pending';
+
+    if (!pending.length) {
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px">No pending approvals.</div>';
+    } else {
+      listEl.innerHTML = pending.map(function(t) {
+        var tool = (t.tool_call && t.tool_call.tool) || 'unknown';
+        var reason = (t.reason || '').slice(0, 90);
+        var sev = (t.severity || 'low').toLowerCase();
+        var rule = t.rule_id || '-';
+        var session = (t.tool_call && t.tool_call.session_id) || '-';
+        return '<div class="approval-item">' +
+          '<div class="approval-head">' +
+            '<span class="approval-tool">' + tool + '</span>' +
+            '<span class="approval-sev ' + severityClass(sev) + '">' + sev + '</span>' +
+          '</div>' +
+          '<div class="approval-reason">' + reason + '</div>' +
+          '<div class="approval-meta">rule: ' + rule + ' | session: ' + session + '</div>' +
+          '<div class="approval-actions">' +
+            '<button class="approval-btn allow" data-id="' + t.ticket_id + '" data-allow="true">Allow</button>' +
+            '<button class="approval-btn deny" data-id="' + t.ticket_id + '" data-allow="false">Deny</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      listEl.querySelectorAll('.approval-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var ticketId = btn.dataset.id;
+          var allow = btn.dataset.allow === 'true';
+          resolveApproval(ticketId, allow);
+        });
+      });
+    }
+
+    if (!remembered.length) {
+      rememberEl.innerHTML = '<div style="font-size:11px;color:var(--text2)">No remembered decisions.</div>';
+    } else {
+      rememberEl.innerHTML = remembered.map(function(r) {
+        return '<div class="remember-item">' +
+          '<span class="remember-text">' + r.action.toUpperCase() + ' | ' + r.scope +
+            ' | ' + (r.tool_type || 'tool') + '</span>' +
+          '<button class="remember-revoke" data-id="' + r.remember_id + '">Revoke</button>' +
+        '</div>';
+      }).join('');
+      rememberEl.querySelectorAll('.remember-revoke').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          revokeRemembered(btn.dataset.id);
+        });
+      });
+    }
+  });
+}
+
+function resolveApproval(ticketId, allow) {
+  fetchJSON('/api/approvals/resolve', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      ticket_id: ticketId,
+      allow: allow,
+      scope: 'session',
+      approver: 'dashboard-user'
+    }),
+  }).then(function(result) {
+    if (result.ok) {
+      showToast((allow ? 'Approved: ' : 'Denied: ') + ticketId);
+    } else {
+      showToast('Resolve failed: ' + (result.error || 'unknown'), 3500);
+    }
+    return refreshApprovals();
+  });
+}
+
+function revokeRemembered(rememberId) {
+  fetchJSON('/api/approvals/revoke', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({remember_id: rememberId}),
+  }).then(function(result) {
+    if (result.ok) {
+      showToast('Remembered decision revoked');
+    } else {
+      showToast('Revoke failed: ' + (result.error || 'unknown'), 3500);
+    }
+    return refreshApprovals();
   });
 }
 
@@ -626,7 +787,7 @@ document.querySelectorAll('.filter-btn').forEach(function(btn) {
 });
 
 function refreshAll() {
-  return Promise.all([refreshStats(), refreshLogs(), refreshFrameworks()]);
+  return Promise.all([refreshStats(), refreshLogs(), refreshFrameworks(), refreshApprovals()]);
 }
 refreshAll();
 loadScanPaths();

@@ -43,8 +43,13 @@ class RuleMatcher:
                     return rule
                 continue
 
-            if rule.match and self._conditions_match(rule, tool_call):
-                return rule
+            if rule.match:
+                if self._conditions_match(rule, tool_call):
+                    return rule
+                continue
+
+            # Unconditional rule: applies to this tool_type/os directly.
+            return rule
 
         return None
 

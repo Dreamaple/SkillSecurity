@@ -188,6 +188,27 @@ skillsecurity validate my-policy.yaml
 
 # Query audit logs
 skillsecurity log --action block --limit 20
+
+# Supply-chain scan (SBOM + vulnerability feed + trust checks)
+skillsecurity supplychain ./my-skill/ --vuln-feed ./vuln-feed.json --allow-domain github.com
+
+# Sync OpenClaw advisories from GitHub
+skillsecurity intel-sync --output ./docs/security-intel/openclaw-advisories.json
+
+# Compute rule effectiveness metrics from audit logs
+skillsecurity metrics --log-path ./logs/skillsecurity-audit.jsonl
+
+# List pending approvals
+skillsecurity approval list
+skillsecurity approval --api-url http://127.0.0.1:9099 list
+
+# Approve or deny a ticket
+skillsecurity approval approve appr-1234567890abcdef --scope session --approver alice
+skillsecurity approval deny appr-1234567890abcdef --scope once --approver alice
+
+# List/revoke remembered decisions
+skillsecurity approval list --remembered
+skillsecurity approval revoke mem-1234567890abcdef
 ```
 
 ## Custom Security Policy
@@ -232,6 +253,7 @@ guard = SkillGuard(policy_file="skillsecurity.yaml")
 | `default` | allow | Balanced — blocks known dangerous patterns |
 | `strict` | block | Production — only whitelisted operations pass |
 | `development` | allow | Local dev — catches critical risks only |
+| `openclaw-hardened` | block | OpenClaw/MCP hardening — deny-by-default with stronger guardrails |
 
 ## One-Line Framework Integration
 
@@ -372,7 +394,7 @@ src/skillsecurity/
 ├── selfprotect/         # Self-protection guard
 └── cli/                 # CLI commands (check, scan, init, validate, log, dashboard)
 
-policies/                # Built-in policy templates (default, strict, development)
+policies/                # Built-in policy templates (default, strict, development, openclaw-hardened)
 tests/                   # 346 tests (unit + integration)
 docs/                    # Design docs, threat model, architecture
 ```

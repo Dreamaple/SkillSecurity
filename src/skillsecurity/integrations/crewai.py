@@ -13,7 +13,11 @@ from __future__ import annotations
 import functools
 from typing import Any
 
-from skillsecurity.integrations._base import _get_or_create_guard
+from skillsecurity.integrations._base import (
+    _build_pending_approval_payload,
+    _format_pending_approval_message,
+    _get_or_create_guard,
+)
 
 _originals: dict[str, Any] = {}
 _guard: Any = None
@@ -45,11 +49,15 @@ def install(**kwargs: Any) -> None:
             if args:
                 params["input"] = args[0] if len(args) == 1 else list(args)
             params.update(kw)
-            decision = _guard.check({"tool": tool_type, **params})
+            tool_call = {"tool": tool_type, **params}
+            decision = _guard.check(tool_call)
             if decision.is_blocked:
                 return f"[SkillSecurity] Blocked: {decision.reason}"
             if decision.needs_confirmation:
-                return f"[SkillSecurity] Requires confirmation: {decision.reason}"
+                payload = _build_pending_approval_payload(
+                    _guard, tool_call, decision, source="crewai"
+                )
+                return _format_pending_approval_message(payload)
             return _originals["_run"](self, *args, **kw)
 
         CrewBaseTool._run = secured_run  # type: ignore[attr-defined]

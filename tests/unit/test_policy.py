@@ -18,6 +18,12 @@ class TestPolicyLoading:
         engine.load_builtin("default")
         assert len(engine.rules) > 0
 
+    def test_load_builtin_openclaw_hardened(self):
+        engine = PolicyEngine()
+        engine.load_builtin("openclaw-hardened")
+        assert len(engine.rules) > 0
+        assert engine.global_config.default_action == "block"
+
     def test_rules_have_correct_types(self, tmp_policy_file):
         engine = PolicyEngine()
         engine.load_file(tmp_policy_file)

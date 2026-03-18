@@ -40,6 +40,12 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             self._json_response(self.api.get_config())
         elif path == "/api/scan/paths":
             self._json_response(self.api.get_scan_paths())
+        elif path == "/api/approvals/pending":
+            limit = int(params.get("limit", ["50"])[0])
+            self._json_response(self.api.get_pending_approvals(limit=limit))
+        elif path == "/api/approvals/remembered":
+            limit = int(params.get("limit", ["50"])[0])
+            self._json_response(self.api.get_remembered_approvals(limit=limit))
         else:
             self.send_error(404)
 
@@ -73,6 +79,22 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             for p in paths:
                 results.append(self.api.scan_skill(p))
             self._json_response({"results": results, "total": len(results)})
+        elif path == "/api/approvals/resolve":
+            ticket_id = str(body.get("ticket_id", "")).strip()
+            allow = bool(body.get("allow", False))
+            approver = body.get("approver")
+            scope = str(body.get("scope", "once")).strip() or "once"
+            self._json_response(
+                self.api.resolve_approval(
+                    ticket_id=ticket_id,
+                    allow=allow,
+                    approver=str(approver) if approver else None,
+                    scope=scope,
+                )
+            )
+        elif path == "/api/approvals/revoke":
+            remember_id = str(body.get("remember_id", "")).strip()
+            self._json_response(self.api.revoke_remembered_approval(remember_id))
         else:
             self.send_error(404)
 

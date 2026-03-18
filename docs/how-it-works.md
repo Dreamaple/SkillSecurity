@@ -263,6 +263,14 @@ skillsecurity scan ./my-skill/
 
 # 查看审计日志
 skillsecurity log --action block --limit 10
+
+# 查看待审批队列
+skillsecurity approval list
+skillsecurity approval --api-url http://127.0.0.1:9099 list
+
+# 通过/拒绝审批票据
+skillsecurity approval approve appr-1234567890abcdef --scope session --approver alice
+skillsecurity approval deny appr-1234567890abcdef --scope once --approver alice
 ```
 
 ---
@@ -308,6 +316,7 @@ rules:
 | `default` | allow | 日常使用——拦截已知危险模式，其他放行 |
 | `strict` | block | 生产环境——仅白名单操作放行，其他全部拦截或询问 |
 | `development` | allow | 本地开发——只拦截最致命的操作（rm -rf、磁盘操作、反向 shell） |
+| `openclaw-hardened` | block | OpenClaw/MCP 加固——默认拒绝并增加命令注入/路径穿越/可疑域名拦截 |
 
 ```python
 # 使用不同策略

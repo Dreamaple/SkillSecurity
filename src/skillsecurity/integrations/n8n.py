@@ -23,7 +23,7 @@ import json
 import threading
 from typing import Any
 
-from skillsecurity.integrations._base import _get_or_create_guard
+from skillsecurity.integrations._base import _build_pending_approval_payload, _get_or_create_guard
 
 _server_thread: threading.Thread | None = None
 _shutdown_event: threading.Event | None = None
@@ -70,7 +70,23 @@ def install(**kwargs: Any) -> None:
                     return
 
                 decision = guard.check(tool_call)
-                resp = json.dumps(decision.to_dict(), ensure_ascii=False)
+                response_data = decision.to_dict()
+                if decision.needs_confirmation:
+                    approval = _build_pending_approval_payload(
+                        guard, tool_call, decision, source="n8n"
+                    )
+                    response_data.update(
+                        {
+                            "status": approval["status"],
+                            "ticket_id": approval["ticket_id"],
+                            "decision_type": approval["decision_type"],
+                            "expires_at": approval["expires_at"],
+                            "protocol": approval["protocol"],
+                            "approval": approval,
+                        }
+                    )
+
+                resp = json.dumps(response_data, ensure_ascii=False)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()

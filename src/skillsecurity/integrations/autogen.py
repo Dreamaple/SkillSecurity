@@ -13,7 +13,11 @@ from __future__ import annotations
 import functools
 from typing import Any
 
-from skillsecurity.integrations._base import _get_or_create_guard
+from skillsecurity.integrations._base import (
+    _build_pending_approval_payload,
+    _format_pending_approval_message,
+    _get_or_create_guard,
+)
 
 _originals: dict[str, Any] = {}
 _guard: Any = None
@@ -47,12 +51,17 @@ def install(**kwargs: Any) -> None:
                     arguments = {"input": arguments}
 
             tool_type = _infer_tool_type(name)
-            decision = _guard.check({"tool": tool_type, "tool_name": name, **arguments})
+            tool_call = {"tool": tool_type, "tool_name": name, **arguments}
+            decision = _guard.check(tool_call)
             if decision.is_blocked:
                 return False, {"content": f"[SkillSecurity] Blocked: {decision.reason}"}
             if decision.needs_confirmation:
+                payload = _build_pending_approval_payload(
+                    _guard, tool_call, decision, source="autogen"
+                )
                 return False, {
-                    "content": f"[SkillSecurity] Requires confirmation: {decision.reason}"
+                    "content": _format_pending_approval_message(payload),
+                    "skillsecurity": payload,
                 }
             return _originals["execute_function"](self, func_call, *args, **kw)
 

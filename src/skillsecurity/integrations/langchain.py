@@ -14,7 +14,11 @@ from __future__ import annotations
 import functools
 from typing import Any
 
-from skillsecurity.integrations._base import _get_or_create_guard
+from skillsecurity.integrations._base import (
+    _build_pending_approval_payload,
+    _format_pending_approval_message,
+    _get_or_create_guard,
+)
 
 _originals: dict[str, Any] = {}
 _guard: Any = None
@@ -43,10 +47,10 @@ def install(**kwargs: Any) -> None:
         if decision.is_blocked:
             return f"[SkillSecurity] Blocked: {decision.reason}"
         if decision.needs_confirmation:
-            return (
-                f"[SkillSecurity] Requires confirmation: {decision.reason}\n"
-                f"Suggestions: {'; '.join(decision.suggestions)}"
+            payload = _build_pending_approval_payload(
+                _guard, tool_call, decision, source="langchain"
             )
+            return _format_pending_approval_message(payload)
         return _originals["_run"](self, *args, **kw)
 
     BaseTool._run = secured_run  # type: ignore[attr-defined]
@@ -61,10 +65,10 @@ def install(**kwargs: Any) -> None:
             if decision.is_blocked:
                 return f"[SkillSecurity] Blocked: {decision.reason}"
             if decision.needs_confirmation:
-                return (
-                    f"[SkillSecurity] Requires confirmation: {decision.reason}\n"
-                    f"Suggestions: {'; '.join(decision.suggestions)}"
+                payload = _build_pending_approval_payload(
+                    _guard, tool_call, decision, source="langchain"
                 )
+                return _format_pending_approval_message(payload)
             return await _originals["_arun"](self, *args, **kw)
 
         BaseTool._arun = secured_arun  # type: ignore[attr-defined]

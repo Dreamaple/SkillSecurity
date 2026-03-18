@@ -5,19 +5,26 @@ from __future__ import annotations
 import contextlib
 import functools
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from skillsecurity.approval.service import ApprovalService, get_shared_approval_service
 from skillsecurity.config.defaults import BUILTIN_POLICIES_DIR
 from skillsecurity.engine.chain import ChainRule, ChainTracker
+from skillsecurity.engine.command_semantics import CommandSemanticsGuard
+from skillsecurity.engine.context_policy import ContextPolicyGuard
 from skillsecurity.engine.decision import DecisionEngine
 from skillsecurity.engine.interceptor import Interceptor
+from skillsecurity.engine.path_boundary import PathBoundaryGuard
 from skillsecurity.engine.policy import PolicyEngine, PolicyLoadError
 from skillsecurity.manifest.parser import ManifestParser, ManifestValidationError
-from skillsecurity.models.decision import Decision
+from skillsecurity.models.decision import Decision, RuleRef
+from skillsecurity.models.rule import Action, Severity
 from skillsecurity.models.tool_call import ToolCall
+from skillsecurity.security.startup_audit import OpenClawDeploymentAuditor, StartupAuditFinding
 from skillsecurity.selfprotect.guard import SelfProtectionGuard
 
 if TYPE_CHECKING:
@@ -85,6 +92,10 @@ class SkillGuard:
     ) -> None:
         self._policy_engine = PolicyEngine()
         self._self_protection = SelfProtectionGuard()
+        self._startup_audit_findings: list[StartupAuditFinding] = []
+        self._ask_config = (config or {}).get("ask", {})
+        self._soft_confirmation_config = self._ask_config.get("soft_confirmation", {})
+        self._approval_service = self._setup_approval(config)
 
         self._load_policy(policy, policy_file, config)
 
@@ -100,6 +111,9 @@ class SkillGuard:
 
         outbound_inspector = self._setup_privacy(config)
         chain_tracker = self._setup_chain_detection(config)
+        path_boundary_guard = self._setup_path_boundary(config)
+        command_semantics_guard = self._setup_command_semantics(config)
+        context_policy_guard = self._setup_context_policy(config)
 
         self._interceptor = Interceptor(
             policy_engine=self._policy_engine,
@@ -108,6 +122,9 @@ class SkillGuard:
             audit_logger=audit_logger,
             outbound_inspector=outbound_inspector,
             chain_tracker=chain_tracker,
+            path_boundary_guard=path_boundary_guard,
+            command_semantics_guard=command_semantics_guard,
+            context_policy_guard=context_policy_guard,
         )
 
         self._setup_self_protection()
@@ -115,6 +132,8 @@ class SkillGuard:
         self._watcher: PolicyWatcher | None = None
         if policy_file:
             self._start_watcher(policy_file)
+
+        self._run_startup_audit(config)
 
     def register_skill(self, skill_id: str, manifest: str | dict) -> None:
         """Register a Skill permission manifest for tool-call authorization."""
@@ -178,7 +197,104 @@ class SkillGuard:
             Decision with action (allow/block/ask), reason, severity, and suggestions.
         """
         tc = ToolCall.from_dict(tool_call)
-        return self._interceptor.check(tc)
+        decision = self._interceptor.check(tc)
+        decision = self._apply_soft_confirmation(tc, decision)
+        decision = self._apply_approval_memory(tc, decision)
+        return decision
+
+    def create_approval_ticket(
+        self,
+        tool_call: dict[str, Any],
+        decision: Decision,
+        *,
+        source: str = "runtime",
+        decision_type: str = "hard_ask",
+    ) -> dict[str, Any]:
+        """Create a pending approval ticket for an ASK decision."""
+        if self._approval_service is None:
+            return {}
+        if not decision.needs_confirmation:
+            return {}
+
+        ticket = self._approval_service.create_ticket(
+            tool_call=tool_call,
+            decision=decision,
+            decision_type=decision_type,
+            source=source,
+        )
+
+        if self._audit_logger:
+            self._audit_logger.log(
+                event_type="approval_ticket_created",
+                request=ticket.tool_call,
+                decision=decision.to_dict(),
+                ticket_id=ticket.ticket_id,
+                source=source,
+                decision_type=decision_type,
+                expires_at=ticket.expires_at.isoformat(),
+            )
+
+        return ticket.to_dict()
+
+    def list_pending_approvals(self, limit: int = 100) -> list[dict[str, Any]]:
+        """List pending approval tickets."""
+        if self._approval_service is None:
+            return []
+        return [t.to_dict() for t in self._approval_service.list_pending(limit=limit)]
+
+    def list_remembered_approvals(self, limit: int = 100) -> list[dict[str, Any]]:
+        """List remembered approval decisions."""
+        if self._approval_service is None:
+            return []
+        return [e.to_dict() for e in self._approval_service.list_remembered(limit=limit)]
+
+    def revoke_remembered_approval(self, remember_id: str) -> bool:
+        """Remove a remembered approval decision by id."""
+        if self._approval_service is None:
+            return False
+        return self._approval_service.revoke_remembered(remember_id)
+
+    def resolve_approval_ticket(
+        self,
+        ticket_id: str,
+        *,
+        allow: bool,
+        approver: str | None = None,
+        scope: str = "once",
+    ) -> dict[str, Any] | None:
+        """Resolve an approval ticket."""
+        if self._approval_service is None:
+            return None
+
+        ticket = self._approval_service.resolve_ticket(
+            ticket_id,
+            allow=allow,
+            approver=approver,
+            scope=scope,
+        )
+        if ticket is None:
+            return None
+
+        if self._audit_logger:
+            self._audit_logger.log(
+                event_type="approval_ticket_resolved",
+                request=ticket.tool_call,
+                decision={
+                    "action": "allow" if allow else "block",
+                    "reason": f"Approval ticket {ticket_id} resolved",
+                    "severity": ticket.severity,
+                },
+                ticket_id=ticket.ticket_id,
+                status=ticket.status.value,
+                approver=approver,
+                scope=scope,
+            )
+        return ticket.to_dict()
+
+    @property
+    def startup_audit_findings(self) -> list[StartupAuditFinding]:
+        """Latest startup deployment audit findings."""
+        return list(self._startup_audit_findings)
 
     def protect(self, func: Callable[..., Any]) -> Callable[..., Any]:
         """Decorator that automatically checks tool calls before execution."""
@@ -192,6 +308,91 @@ class SkillGuard:
             return func(tool_type, **params)
 
         return wrapper
+
+    def _apply_soft_confirmation(self, tool_call: ToolCall, decision: Decision) -> Decision:
+        cfg = self._soft_confirmation_config
+        if not cfg:
+            return decision
+        if not cfg.get("enabled", False):
+            return decision
+        if decision.action != Action.ALLOW:
+            return decision
+
+        tool_types = cfg.get("tool_types", [])
+        if isinstance(tool_types, list) and tool_types and "*" not in tool_types:
+            if tool_call.tool_type.value not in tool_types:
+                return decision
+
+        severity_raw = str(cfg.get("severity", "medium")).strip().lower()
+        try:
+            severity = Severity(severity_raw)
+        except ValueError:
+            severity = Severity.MEDIUM
+
+        suggestions = cfg.get("suggestions")
+        if not isinstance(suggestions, list) or not suggestions:
+            suggestions = [
+                "This operation is allowed by policy but configured for user confirmation.",
+                "Use remember scope to reduce repeated prompts for trusted operations.",
+            ]
+
+        soft_decision = replace(
+            decision,
+            action=Action.ASK,
+            reason=str(
+                cfg.get("message")
+                or "Operation is allowed but requires user confirmation in soft mode"
+            ),
+            severity=severity,
+            rule_matched=RuleRef(
+                id=f"soft-ask:{tool_call.tool_type.value}",
+                description="Soft confirmation before allow",
+            ),
+            suggestions=list(suggestions),
+        )
+
+        if self._audit_logger:
+            self._audit_logger.log(
+                event_type="soft_confirmation_triggered",
+                request={"tool_type": tool_call.tool_type.value, **tool_call.params},
+                decision=soft_decision.to_dict(),
+            )
+        return soft_decision
+
+    def _apply_approval_memory(self, tool_call: ToolCall, decision: Decision) -> Decision:
+        if self._approval_service is None:
+            return decision
+        if not decision.needs_confirmation:
+            return decision
+
+        rule_id = decision.rule_matched.id if decision.rule_matched else None
+        remembered = self._approval_service.match_remembered(tool_call, rule_id=rule_id)
+        if remembered not in {"allow", "deny"}:
+            return decision
+
+        action = Action.ALLOW if remembered == "allow" else Action.BLOCK
+        reason = f"Applied remembered {remembered} decision for this operation fingerprint"
+        updated = replace(
+            decision,
+            action=action,
+            reason=reason,
+            rule_matched=RuleRef(
+                id=f"approval-memory:{remembered}",
+                description="Remembered user confirmation result",
+            ),
+            suggestions=[
+                "Manage remembered entries in Dashboard approval center if this is unexpected."
+            ],
+        )
+
+        if self._audit_logger:
+            self._audit_logger.log(
+                event_type="approval_memory_applied",
+                request={"tool_type": tool_call.tool_type.value, **tool_call.params},
+                decision=updated.to_dict(),
+                memory_action=remembered,
+            )
+        return updated
 
     def _load_policy(
         self,
@@ -211,6 +412,27 @@ class SkillGuard:
 
     def _setup_self_protection(self) -> None:
         self._self_protection.add_protected_path(BUILTIN_POLICIES_DIR)
+
+    def _setup_approval(self, config: dict | None) -> ApprovalService | None:
+        ask_cfg = self._ask_config
+        if ask_cfg.get("enabled", True) is False:
+            return None
+
+        remember_cfg = ask_cfg.get("remember", {})
+        use_shared = ask_cfg.get("shared_service", True)
+        max_entries = ask_cfg.get("max_entries", 1000)
+        timeout_seconds = ask_cfg.get("timeout_seconds", 60)
+        params = {
+            "default_timeout_seconds": timeout_seconds,
+            "max_entries": max_entries,
+            "remember_enabled": remember_cfg.get("enabled", False),
+            "remember_default_scope": remember_cfg.get("scope", "session"),
+            "remember_expiry_hours": remember_cfg.get("expiry_hours", 24),
+            "remember_max_entries": remember_cfg.get("max_entries", 500),
+        }
+        if use_shared:
+            return get_shared_approval_service(**params)
+        return ApprovalService(**params)
 
     def _start_watcher(self, policy_file: str) -> None:
         try:
@@ -291,6 +513,62 @@ class SkillGuard:
             builtin_rules=chain_cfg.get("builtin_rules", True),
             max_history=chain_cfg.get("max_history", 200),
         )
+
+    def _setup_path_boundary(self, config: dict | None) -> PathBoundaryGuard | None:
+        pb_cfg = (config or {}).get("path_boundary", {})
+        if not pb_cfg:
+            return None
+        return PathBoundaryGuard(
+            enabled=pb_cfg.get("enabled", False),
+            allowed_roots=pb_cfg.get("allowed_roots", []),
+        )
+
+    def _setup_command_semantics(self, config: dict | None) -> CommandSemanticsGuard | None:
+        cs_cfg = (config or {}).get("command_semantics", {})
+        if cs_cfg.get("enabled", True):
+            return CommandSemanticsGuard(enabled=True)
+        return None
+
+    def _setup_context_policy(self, config: dict | None) -> ContextPolicyGuard | None:
+        cp_cfg = (config or {}).get("context_policy", {})
+        if not cp_cfg:
+            return None
+        return ContextPolicyGuard(
+            enabled=cp_cfg.get("enabled", False),
+            require_context=cp_cfg.get("require_context", False),
+            role_permissions=cp_cfg.get("role_permissions"),
+            scope_permissions=cp_cfg.get("scope_permissions"),
+        )
+
+    def _run_startup_audit(self, config: dict | None) -> None:
+        sa_cfg = (config or {}).get("startup_audit", {})
+        if not sa_cfg:
+            return
+        if not sa_cfg.get("enabled", True):
+            return
+
+        auditor = OpenClawDeploymentAuditor()
+        findings = auditor.audit(
+            config_file=sa_cfg.get("openclaw_config_file"),
+            openclaw_config=sa_cfg.get("openclaw_config"),
+            require_loopback_bind=sa_cfg.get("require_loopback_bind", True),
+            require_auth=sa_cfg.get("require_auth", True),
+            require_sandbox=sa_cfg.get("require_sandbox", True),
+            blocked_public_ports=sa_cfg.get("blocked_public_ports", [18789, 3000]),
+        )
+        self._startup_audit_findings = findings
+        if self._audit_logger and findings:
+            for f in findings:
+                self._audit_logger.log(
+                    event_type="startup_audit",
+                    request={"finding_id": f.id},
+                    decision={
+                        "action": "block" if f.severity in ("critical", "high") else "ask",
+                        "reason": f.message,
+                        "severity": f.severity,
+                    },
+                    recommendation=f.recommendation,
+                )
 
     def _get_audit_config(self, config: dict | None, policy_file: str | None) -> dict:
         """Extract audit config from config dict or policy file."""

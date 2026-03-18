@@ -19,7 +19,10 @@ SkillSecurity/
     ├── phase-2-permission-and-audit.md ← Phase 2: 权限声明与审计
     ├── phase-3-sdk-and-ecosystem.md  ← Phase 3: 多框架 SDK 与生态
     ├── phase-4-alert-and-interaction.md ← Phase 4: 告警与用户交互
-    └── tier-pro-enterprise.md        ← Pro/Enterprise 扩展层
+    ├── tier-pro-enterprise.md        ← Pro/Enterprise 扩展层
+    ├── openclaw-risk-assessment-zh.md ← OpenClaw 风险预警对照评估与加固方案
+    ├── unfinished-features-and-ux-plan-zh.md ← 当前未完成功能清单与交互方案
+    └── feishu-approval-integration-todo-zh.md ← 飞书审批接入执行清单
 ```
 
 ---
@@ -35,6 +38,9 @@ SkillSecurity/
 | 3 | [威胁模型](threat-model.md) | 八类威胁分析、防御策略、风险评级 | 10 分钟 |
 | 4 | [架构概述](architecture-overview.md) | 系统架构、集成模式、技术选型、部署方案 | 10 分钟 |
 | 5 | [数据分类引擎](data-classification-engine.md) | 敏感数据检测、聊天保护、出站检查、域名信誉 | 8 分钟 |
+| 6 | [OpenClaw 风险评估](openclaw-risk-assessment-zh.md) | OpenClaw 官方预警对照、可防范围、能力缺口、加固路线 | 8 分钟 |
+| 7 | [未完成功能与交互方案](unfinished-features-and-ux-plan-zh.md) | 当前缺口盘点、allow 用户确认方案、两周实施路径 | 8 分钟 |
+| 8 | [飞书审批接入代办](feishu-approval-integration-todo-zh.md) | 飞书官方 SDK 接入、回调按钮审批、测试与发布清单 | 6 分钟 |
 
 ### 按阶段实施（开发时按需阅读）
 

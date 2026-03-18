@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from skillsecurity import SkillGuard
+from skillsecurity.approval import reset_shared_approval_service
 from skillsecurity.dashboard.api import DashboardAPI
 
 
@@ -29,6 +31,11 @@ def _entry(
         "decision": {"action": action, "severity": severity, "reason": reason},
         "tool_call": {"name": "test_tool"},
     }
+
+
+@pytest.fixture(autouse=True)
+def _reset_approval_service_state() -> None:
+    reset_shared_approval_service()
 
 
 class TestDashboardAPIStats:
@@ -291,6 +298,84 @@ class TestDashboardAPIDetection:
         frameworks = api.get_frameworks()
         lc = next(f for f in frameworks if f["id"] == "langchain")
         assert lc["installed"] is True
+
+
+class TestDashboardAPIApprovals:
+    def test_pending_and_resolve_approval(self) -> None:
+        guard = SkillGuard(
+            config={
+                "global": {"default_action": "allow", "fail_behavior": "block"},
+                "rules": [
+                    {
+                        "id": "ask-shell",
+                        "tool_type": "shell",
+                        "action": "ask",
+                        "severity": "high",
+                        "message": "Confirm shell command",
+                    }
+                ],
+                "ask": {
+                    "remember": {
+                        "enabled": True,
+                        "scope": "session",
+                        "expiry_hours": 24,
+                    }
+                }
+            },
+        )
+        tool_call = {"tool": "shell", "command": "echo dashboard", "session_id": "sess-dash"}
+        decision = guard.check(tool_call)
+        assert decision.needs_confirmation
+        created = guard.create_approval_ticket(tool_call, decision, source="dashboard-test")
+
+        api = DashboardAPI()
+        pending = api.get_pending_approvals()
+        assert any(t["ticket_id"] == created["ticket_id"] for t in pending)
+
+        resolved = api.resolve_approval(
+            ticket_id=created["ticket_id"],
+            allow=True,
+            approver="dashboard-user",
+            scope="session",
+        )
+        assert resolved["ok"] is True
+        assert resolved["ticket"]["status"] == "approved"
+
+    def test_remembered_revoke(self) -> None:
+        guard = SkillGuard(
+            config={
+                "global": {"default_action": "allow", "fail_behavior": "block"},
+                "rules": [
+                    {
+                        "id": "ask-shell",
+                        "tool_type": "shell",
+                        "action": "ask",
+                        "severity": "high",
+                        "message": "Confirm shell command",
+                    }
+                ],
+                "ask": {
+                    "remember": {
+                        "enabled": True,
+                        "scope": "session",
+                        "expiry_hours": 24,
+                    }
+                }
+            },
+        )
+        tool_call = {"tool": "shell", "command": "echo revoke", "session_id": "sess-revoke"}
+        decision = guard.check(tool_call)
+        assert decision.needs_confirmation
+        created = guard.create_approval_ticket(tool_call, decision, source="dashboard-test")
+        guard.resolve_approval_ticket(created["ticket_id"], allow=True, scope="session")
+
+        api = DashboardAPI()
+        remembered = api.get_remembered_approvals()
+        assert remembered
+
+        remember_id = remembered[0]["remember_id"]
+        revoked = api.revoke_remembered_approval(remember_id)
+        assert revoked["ok"] is True
 
 
 class TestDashboardServer:

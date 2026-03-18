@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import warnings
 
 
 def _auto_protect() -> None:
@@ -25,6 +26,8 @@ def _auto_protect() -> None:
             return
     except Exception:
         return
+
+    _run_startup_audit(data)
 
     frameworks = data.get("auto_protect", [])
     if not frameworks:
@@ -47,6 +50,34 @@ def _auto_protect() -> None:
     for fw in frameworks:
         with contextlib.suppress(Exception):
             install(fw, **kwargs)
+
+
+def _run_startup_audit(data: dict) -> None:
+    audit_cfg = data.get("startup_audit", {})
+    if not isinstance(audit_cfg, dict):
+        return
+    if not audit_cfg.get("enabled", False):
+        return
+    try:
+        from skillsecurity.security.startup_audit import OpenClawDeploymentAuditor
+
+        findings = OpenClawDeploymentAuditor().audit(
+            config_file=audit_cfg.get("openclaw_config_file"),
+            openclaw_config=audit_cfg.get("openclaw_config"),
+            require_loopback_bind=audit_cfg.get("require_loopback_bind", True),
+            require_auth=audit_cfg.get("require_auth", True),
+            require_sandbox=audit_cfg.get("require_sandbox", True),
+            blocked_public_ports=audit_cfg.get("blocked_public_ports", [18789, 3000]),
+        )
+        if findings:
+            warnings.warn(
+                f"[SkillSecurity] startup_audit found {len(findings)} risk findings. "
+                "Review deployment hardening settings.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+    except Exception:
+        return
 
 
 with contextlib.suppress(Exception):

@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from skillsecurity.approval import get_shared_approval_service
+
 _CONFIG_FILE = ".skillsecurity.yaml"
 _KNOWN_FRAMEWORKS = {
     "langchain": {
@@ -71,6 +73,7 @@ _start_time = time.time()
 class DashboardAPI:
     def __init__(self, log_path: str = "./logs/skillsecurity-audit.jsonl") -> None:
         self._log_path = Path(log_path)
+        self._approval = get_shared_approval_service()
 
     def get_stats(self) -> dict[str, Any]:
         """Aggregate stats from audit logs."""
@@ -241,6 +244,43 @@ class DashboardAPI:
         )
 
         return {"paths": paths, "cwd": cwd}
+
+    def get_pending_approvals(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return pending approval tickets."""
+        return [t.to_dict() for t in self._approval.list_pending(limit=limit)]
+
+    def resolve_approval(
+        self,
+        ticket_id: str,
+        allow: bool,
+        approver: str | None = None,
+        scope: str = "once",
+    ) -> dict[str, Any]:
+        """Resolve an approval ticket and return the updated record."""
+        if not ticket_id:
+            return {"ok": False, "error": "ticket_id is required"}
+        ticket = self._approval.resolve_ticket(
+            ticket_id,
+            allow=allow,
+            approver=approver,
+            scope=scope,
+        )
+        if ticket is None:
+            return {"ok": False, "error": f"ticket not found: {ticket_id}"}
+        return {"ok": True, "ticket": ticket.to_dict()}
+
+    def get_remembered_approvals(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return remembered approval entries."""
+        return [e.to_dict() for e in self._approval.list_remembered(limit=limit)]
+
+    def revoke_remembered_approval(self, remember_id: str) -> dict[str, Any]:
+        """Delete a remembered approval entry."""
+        if not remember_id:
+            return {"ok": False, "error": "remember_id is required"}
+        ok = self._approval.revoke_remembered(remember_id)
+        if not ok:
+            return {"ok": False, "error": f"remembered entry not found: {remember_id}"}
+        return {"ok": True, "remember_id": remember_id}
 
     @staticmethod
     def _read_config() -> dict:

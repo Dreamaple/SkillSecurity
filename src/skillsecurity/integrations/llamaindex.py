@@ -13,7 +13,11 @@ from __future__ import annotations
 import functools
 from typing import Any
 
-from skillsecurity.integrations._base import _get_or_create_guard
+from skillsecurity.integrations._base import (
+    _build_pending_approval_payload,
+    _format_pending_approval_message,
+    _get_or_create_guard,
+)
 
 _originals: dict[str, Any] = {}
 _guard: Any = None
@@ -48,7 +52,8 @@ def install(**kwargs: Any) -> None:
                 params["input"] = args[0] if len(args) == 1 else list(args)
             params.update(kw)
 
-            decision = _guard.check({"tool": tool_type, **params})
+            tool_call = {"tool": tool_type, **params}
+            decision = _guard.check(tool_call)
             if decision.is_blocked:
                 from llama_index.core.tools import ToolOutput
 
@@ -57,6 +62,19 @@ def install(**kwargs: Any) -> None:
                     tool_name=name,
                     raw_input=params,
                     raw_output=f"Blocked: {decision.reason}",
+                )
+            if decision.needs_confirmation:
+                from llama_index.core.tools import ToolOutput
+
+                payload = _build_pending_approval_payload(
+                    _guard, tool_call, decision, source="llamaindex"
+                )
+                message = _format_pending_approval_message(payload)
+                return ToolOutput(
+                    content=message,
+                    tool_name=name,
+                    raw_input=params,
+                    raw_output=message,
                 )
             return _originals["call"](self, *args, **kw)
 

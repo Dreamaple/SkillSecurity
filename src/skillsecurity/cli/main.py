@@ -6,6 +6,8 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 import click
 
@@ -147,7 +149,7 @@ def check(
 @click.option(
     "--template",
     default="default",
-    type=click.Choice(["default", "strict", "development"]),
+    type=click.Choice(["default", "strict", "development", "openclaw-hardened"]),
     help="Policy template to use",
 )
 @click.option("--output", "-o", default="./skillsecurity.yaml", help="Output file path")
@@ -463,6 +465,137 @@ def status_cmd() -> None:
     click.echo(f"  Auto-protect hook: {hook_status}")
 
 
+@cli.command("supplychain")
+@click.argument("target_path", type=click.Path(exists=True), default=".", required=False)
+@click.option(
+    "--vuln-feed",
+    default=None,
+    type=click.Path(exists=True),
+    help="JSON vulnerability feed file",
+)
+@click.option(
+    "--allow-domain",
+    "allow_domains",
+    multiple=True,
+    help="Allowed source domain (repeatable, supports *.example.com)",
+)
+@click.option(
+    "--hashes",
+    "hashes_file",
+    default=None,
+    type=click.Path(exists=True),
+    help="Expected SHA256 mapping JSON file",
+)
+@click.pass_context
+def supplychain_cmd(
+    ctx: click.Context,
+    target_path: str,
+    vuln_feed: str | None,
+    allow_domains: tuple[str, ...],
+    hashes_file: str | None,
+) -> None:
+    """Run supply-chain analysis (SBOM + vuln feed + trust checks)."""
+    from skillsecurity.supplychain.analyzer import analyze_supply_chain
+
+    report = analyze_supply_chain(
+        target_path=target_path,
+        vuln_feed_file=vuln_feed,
+        allowed_domains=list(allow_domains),
+        hashes_file=hashes_file,
+    )
+    output_format = ctx.obj["format"]
+    if output_format == "json":
+        click.echo(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"\nSupply-chain scan: {target_path}")
+        click.echo(f"  Risk level: {report['risk_level'].upper()}")
+        click.echo(f"  Components: {report['sbom']['component_count']}")
+        click.echo(f"  Vulnerabilities: {len(report['vulnerability_findings'])}")
+        click.echo(f"  Source allowlist findings: {len(report['source_allowlist_findings'])}")
+        click.echo(f"  Hash findings: {len(report['hash_findings'])}")
+    if report["risk_level"] in {"critical", "high"}:
+        ctx.exit(1)
+    if report["risk_level"] == "medium":
+        ctx.exit(2)
+    ctx.exit(0)
+
+
+@cli.command("intel-sync")
+@click.option(
+    "--output",
+    default="./docs/security-intel/openclaw-advisories.json",
+    help="Output file for synced advisories",
+)
+@click.option("--limit", default=100, help="Max advisories to fetch (1-100)")
+@click.option("--token", default=None, help="GitHub token (optional)")
+@click.pass_context
+def intel_sync_cmd(ctx: click.Context, output: str, limit: int, token: str | None) -> None:
+    """Sync OpenClaw advisories from GitHub Security API."""
+    from skillsecurity.security.intel_sync import sync_openclaw_advisories
+
+    try:
+        result = sync_openclaw_advisories(output_path=output, limit=limit, token=token)
+    except Exception as e:
+        click.echo(f"Intel sync failed: {e}", err=True)
+        ctx.exit(3)
+        return
+
+    output_format = ctx.obj["format"]
+    if output_format == "json":
+        click.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"Synced {result['count']} advisories to {result['output']}")
+
+
+@cli.command("metrics")
+@click.option("--log-path", default="./logs/skillsecurity-audit.jsonl", help="Audit log path")
+@click.option("--feedback-file", default=None, type=click.Path(exists=True), help="JSON feedback")
+@click.option("--incidents-file", default=None, type=click.Path(exists=True), help="JSON incidents")
+@click.option(
+    "--remediation-file",
+    default=None,
+    type=click.Path(exists=True),
+    help="JSON remediation records",
+)
+@click.option(
+    "--regression-report",
+    default=None,
+    type=click.Path(exists=True),
+    help="JSON/XML regression report",
+)
+@click.pass_context
+def metrics_cmd(
+    ctx: click.Context,
+    log_path: str,
+    feedback_file: str | None,
+    incidents_file: str | None,
+    remediation_file: str | None,
+    regression_report: str | None,
+) -> None:
+    """Compute rule effectiveness and security metrics."""
+    from skillsecurity.metrics.analyzer import MetricsInputs, analyze_metrics
+
+    result = analyze_metrics(
+        MetricsInputs(
+            log_path=log_path,
+            feedback_file=feedback_file,
+            incidents_file=incidents_file,
+            remediation_file=remediation_file,
+            regression_report=regression_report,
+        )
+    )
+    output_format = ctx.obj["format"]
+    if output_format == "json":
+        click.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        click.echo("\nSecurity Metrics")
+        click.echo(f"  Total checks: {result['total_checks']}")
+        click.echo(f"  Block rate: {result['block_rate']}")
+        click.echo(f"  Ask rate: {result['ask_rate']}")
+        click.echo(f"  Avg check ms: {result['avg_check_duration_ms']}")
+        click.echo(f"  P95 check ms: {result['p95_check_duration_ms']}")
+
+
 @cli.command()
 @click.argument("policy_file", type=click.Path(exists=True))
 def validate(policy_file: str) -> None:
@@ -514,3 +647,254 @@ def dashboard_cmd(host: str, port: int, log_path: str, no_browser: bool) -> None
     from skillsecurity.dashboard.server import run_dashboard
 
     run_dashboard(host=host, port=port, log_path=log_path, open_browser=not no_browser)
+
+
+@cli.group("approval")
+@click.option(
+    "--api-url",
+    default=None,
+    help="Dashboard API base URL (e.g. http://127.0.0.1:9099)",
+)
+@click.pass_context
+def approval_group(ctx: click.Context, api_url: str | None) -> None:
+    """Manage pending approvals and remembered decisions."""
+    ctx.ensure_object(dict)
+    ctx.obj["approval_api_url"] = api_url.rstrip("/") if api_url else None
+
+
+def _approval_api_request(
+    api_url: str,
+    path: str,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+) -> Any:
+    body: bytes | None = None
+    headers = {}
+    if payload is not None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    req = Request(url=f"{api_url}{path}", data=body, method=method, headers=headers)
+    with urlopen(req, timeout=10) as resp:  # noqa: S310
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _short_text(value: str, max_len: int = 60) -> str:
+    if len(value) <= max_len:
+        return value
+    return value[: max_len - 3] + "..."
+
+
+@approval_group.command("list")
+@click.option("--remembered", is_flag=True, help="List remembered entries instead of pending")
+@click.option("--limit", default=50, help="Max entries")
+@click.pass_context
+def approval_list_cmd(ctx: click.Context, remembered: bool, limit: int) -> None:
+    """List pending approval tickets or remembered decisions."""
+    output_format = ctx.obj["format"]
+    api_url = ctx.obj.get("approval_api_url")
+
+    if remembered:
+        if api_url:
+            try:
+                entries = _approval_api_request(
+                    api_url, f"/api/approvals/remembered?{urlencode({'limit': limit})}"
+                )
+            except Exception as e:
+                click.echo(f"Approval API error: {e}", err=True)
+                ctx.exit(3)
+                return
+        else:
+            guard = _make_guard(ctx)
+            entries = guard.list_remembered_approvals(limit=limit)
+        if output_format == "json":
+            click.echo(json.dumps(entries, ensure_ascii=False, indent=2))
+            return
+        if not entries:
+            click.echo("No remembered approvals found.")
+            return
+        for e in entries:
+            click.echo(
+                f"{e.get('remember_id', '-')[:20]}  {e.get('action', '-'):5s}  "
+                f"{e.get('scope', '-'):7s}  {e.get('tool_type', '-'):14s}  "
+                f"{e.get('expires_at', '-')[:19]}"
+            )
+        return
+
+    if api_url:
+        try:
+            tickets = _approval_api_request(
+                api_url, f"/api/approvals/pending?{urlencode({'limit': limit})}"
+            )
+        except Exception as e:
+            click.echo(f"Approval API error: {e}", err=True)
+            ctx.exit(3)
+            return
+    else:
+        guard = _make_guard(ctx)
+        tickets = guard.list_pending_approvals(limit=limit)
+    if output_format == "json":
+        click.echo(json.dumps(tickets, ensure_ascii=False, indent=2))
+        return
+    if not tickets:
+        click.echo("No pending approvals found.")
+        return
+    for t in tickets:
+        tool = (t.get("tool_call") or {}).get("tool", "unknown")
+        reason = _short_text(str(t.get("reason", "")))
+        click.echo(
+            f"{t.get('ticket_id', '-')[:20]}  {str(t.get('severity', '-')):8s}  "
+            f"{str(t.get('decision_type', '-')):10s}  {tool:14s}  {reason}"
+        )
+
+
+@approval_group.command("approve")
+@click.argument("ticket_id")
+@click.option(
+    "--scope",
+    default="session",
+    type=click.Choice(["once", "session", "agent", "global"]),
+    help="Remember scope for this decision",
+)
+@click.option("--approver", default=None, help="Approver identity")
+@click.pass_context
+def approval_approve_cmd(ctx: click.Context, ticket_id: str, scope: str, approver: str | None) -> None:
+    """Approve a pending ticket."""
+    output_format = ctx.obj["format"]
+    api_url = ctx.obj.get("approval_api_url")
+
+    if api_url:
+        try:
+            result = _approval_api_request(
+                api_url,
+                "/api/approvals/resolve",
+                method="POST",
+                payload={
+                    "ticket_id": ticket_id,
+                    "allow": True,
+                    "approver": approver,
+                    "scope": scope,
+                },
+            )
+        except Exception as e:
+            click.echo(f"Approval API error: {e}", err=True)
+            ctx.exit(3)
+            return
+        if not result.get("ok"):
+            click.echo(str(result.get("error", f"Ticket not found: {ticket_id}")), err=True)
+            ctx.exit(2)
+            return
+        resolved = result.get("ticket", {})
+    else:
+        guard = _make_guard(ctx)
+        resolved = guard.resolve_approval_ticket(
+            ticket_id=ticket_id,
+            allow=True,
+            approver=approver,
+            scope=scope,
+        )
+        if resolved is None:
+            click.echo(f"Ticket not found: {ticket_id}", err=True)
+            ctx.exit(2)
+            return
+
+    if output_format == "json":
+        click.echo(json.dumps(resolved, ensure_ascii=False, indent=2))
+    else:
+        click.echo(
+            f"Approved {ticket_id} (status={resolved.get('status')}, scope={resolved.get('scope')})"
+        )
+
+
+@approval_group.command("deny")
+@click.argument("ticket_id")
+@click.option(
+    "--scope",
+    default="once",
+    type=click.Choice(["once", "session", "agent", "global"]),
+    help="Remember scope for this decision",
+)
+@click.option("--approver", default=None, help="Approver identity")
+@click.pass_context
+def approval_deny_cmd(ctx: click.Context, ticket_id: str, scope: str, approver: str | None) -> None:
+    """Deny a pending ticket."""
+    output_format = ctx.obj["format"]
+    api_url = ctx.obj.get("approval_api_url")
+
+    if api_url:
+        try:
+            result = _approval_api_request(
+                api_url,
+                "/api/approvals/resolve",
+                method="POST",
+                payload={
+                    "ticket_id": ticket_id,
+                    "allow": False,
+                    "approver": approver,
+                    "scope": scope,
+                },
+            )
+        except Exception as e:
+            click.echo(f"Approval API error: {e}", err=True)
+            ctx.exit(3)
+            return
+        if not result.get("ok"):
+            click.echo(str(result.get("error", f"Ticket not found: {ticket_id}")), err=True)
+            ctx.exit(2)
+            return
+        resolved = result.get("ticket", {})
+    else:
+        guard = _make_guard(ctx)
+        resolved = guard.resolve_approval_ticket(
+            ticket_id=ticket_id,
+            allow=False,
+            approver=approver,
+            scope=scope,
+        )
+        if resolved is None:
+            click.echo(f"Ticket not found: {ticket_id}", err=True)
+            ctx.exit(2)
+            return
+
+    if output_format == "json":
+        click.echo(json.dumps(resolved, ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"Denied {ticket_id} (status={resolved.get('status')}, scope={resolved.get('scope')})")
+
+
+@approval_group.command("revoke")
+@click.argument("remember_id")
+@click.pass_context
+def approval_revoke_cmd(ctx: click.Context, remember_id: str) -> None:
+    """Revoke a remembered approval decision."""
+    output_format = ctx.obj["format"]
+    api_url = ctx.obj.get("approval_api_url")
+
+    if api_url:
+        try:
+            result = _approval_api_request(
+                api_url,
+                "/api/approvals/revoke",
+                method="POST",
+                payload={"remember_id": remember_id},
+            )
+        except Exception as e:
+            click.echo(f"Approval API error: {e}", err=True)
+            ctx.exit(3)
+            return
+        if not result.get("ok"):
+            click.echo(str(result.get("error", f"Remembered entry not found: {remember_id}")), err=True)
+            ctx.exit(2)
+            return
+    else:
+        guard = _make_guard(ctx)
+        ok = guard.revoke_remembered_approval(remember_id)
+        if not ok:
+            click.echo(f"Remembered entry not found: {remember_id}", err=True)
+            ctx.exit(2)
+            return
+
+    if output_format == "json":
+        click.echo(json.dumps({"ok": True, "remember_id": remember_id}, ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"Revoked remembered entry: {remember_id}")

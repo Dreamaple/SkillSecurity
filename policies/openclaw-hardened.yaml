@@ -1,0 +1,180 @@
+version: "1.0"
+name: "openclaw-hardened"
+description: "OpenClaw/MCP hardened policy — default deny with high-risk guardrails"
+
+global:
+  default_action: block
+  log_level: info
+  fail_behavior: block
+
+rules:
+  # ──────────────── Command Injection / RCE ────────────────
+  - id: "block-recursive-delete-unix"
+    tool_type: shell
+    match:
+      command_pattern: "rm\\s+.*(-[a-zA-Z]*r|--recursive)"
+    action: block
+    severity: critical
+    message: "Recursive deletion detected"
+
+  - id: "block-recursive-delete-windows"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)(del\\s+/s|rd\\s+/s|rmdir\\s+/s)"
+    action: block
+    severity: critical
+    message: "Recursive deletion detected"
+
+  - id: "block-command-injection-metachar"
+    tool_type: shell
+    match:
+      command_pattern: "(?<!\\\\)(;|&&|\\|\\||`|\\$\\()"
+    action: block
+    severity: critical
+    message: "Potential command injection metacharacters detected"
+    suggestions:
+      - "Avoid command chaining and command substitution in tool calls"
+      - "Use structured tool parameters instead of shell concatenation"
+
+  - id: "block-pipe-to-shell"
+    tool_type: shell
+    match:
+      command_pattern: "(curl|wget)\\s+.*\\|\\s*(bash|sh|zsh|dash)"
+    action: block
+    severity: critical
+    message: "Remote code execution via pipe to shell"
+
+  - id: "block-powershell-download-exec"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)powershell\\s+.*(-exec\\s*bypass|iex|invoke-expression|downloadstring|downloadfile)"
+    action: block
+    severity: critical
+    message: "PowerShell remote code execution detected"
+
+  - id: "block-disk-operations-unix"
+    tool_type: shell
+    match:
+      command_pattern: "(\\bdd\\s+if=|\\bmkfs\\.|\\bfdisk\\b|\\bparted\\b)"
+    action: block
+    severity: critical
+    message: "Disk-level operation detected"
+
+  - id: "block-disk-operations-windows"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)\\b(format\\s+[a-zA-Z]:|diskpart)\\b"
+    action: block
+    severity: critical
+    message: "Disk-level operation detected"
+
+  - id: "block-reverse-shell"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)(nc\\s+.*-e|ncat\\s+.*-e|/dev/tcp/|bash\\s+-i\\s+>&|python.*socket.*connect)"
+    action: block
+    severity: critical
+    message: "Reverse shell attempt detected"
+
+  - id: "block-download-to-sensitive-path-unix"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)(curl|wget)\\s+.*(-o|--output|-O)\\s+['\"]?(/etc|/System|/boot|/sbin|/usr/sbin|/root|~/.ssh|~/.aws|~/.gnupg)"
+    action: block
+    severity: critical
+    message: "Download to sensitive system/credential path blocked"
+
+  - id: "block-download-to-sensitive-path-windows"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)(curl|wget)\\s+.*(-o|--output|-O)\\s+['\"]?[a-zA-Z]:\\\\(Windows|Program Files)"
+    action: block
+    severity: critical
+    message: "Download to sensitive Windows path blocked"
+
+  # ──────────────── Path Traversal / Sensitive Paths ────────────────
+  - id: "block-path-traversal"
+    tool_type:
+      - file.read
+      - file.write
+      - file.delete
+    match:
+      path_pattern: "(?i)(\\.\\./|\\.\\.\\\\|%2e%2e|%252e%252e)"
+    action: block
+    severity: high
+    message: "Path traversal pattern detected"
+
+  - id: "block-system-paths-unix"
+    tool_type:
+      - file.write
+      - file.delete
+    match:
+      path_pattern: "^(/etc|/System|/boot|/sbin|/usr/sbin)"
+    action: block
+    severity: critical
+    message: "System directory modification blocked"
+
+  - id: "block-system-paths-windows"
+    tool_type:
+      - file.write
+      - file.delete
+    match:
+      path_pattern: "(?i)^(C:\\\\Windows|C:\\\\Program Files)"
+    action: block
+    severity: critical
+    message: "System directory modification blocked"
+
+  # ──────────────── Network Guardrails ────────────────
+  - id: "block-suspicious-url-direct"
+    tool_type: network.request
+    match:
+      url_pattern: "(?i)(ngrok\\.io|serveo\\.net|localtunnel\\.me|requestbin\\.com|webhook\\.site|pipedream\\.net|requestcatcher\\.com)"
+    action: block
+    severity: high
+    message: "Request to suspicious domain blocked"
+
+  # ──────────────── Explicit Allows ────────────────
+  - id: "allow-read-only"
+    tool_type: file.read
+    action: allow
+    severity: low
+    message: "File read is allowed by hardened policy"
+
+  - id: "allow-safe-shell-readonly"
+    tool_type: shell
+    match:
+      command_pattern: "^(ls|dir|pwd|echo|cat|type|head|tail|wc|date|whoami|hostname|uname|rg)\\b"
+    action: allow
+    severity: low
+    message: "Read-only shell command is allowed"
+
+  # ──────────────── Ask Fallbacks ────────────────
+  - id: "ask-privilege-escalation"
+    tool_type: shell
+    match:
+      command_pattern: "(?i)^(sudo|runas)\\s"
+    action: ask
+    severity: high
+    message: "Privilege escalation requires confirmation"
+
+  - id: "ask-all-file-modifications"
+    tool_type:
+      - file.write
+      - file.delete
+    action: ask
+    severity: high
+    message: "File modification requires confirmation in hardened mode"
+
+  - id: "ask-all-network-writes"
+    tool_type: network.request
+    match:
+      param_pattern: "(?i)\\b(POST|PUT|PATCH|DELETE)\\b"
+    action: ask
+    severity: high
+    message: "Network write request requires confirmation in hardened mode"
+
+  - id: "ask-all-shell"
+    tool_type: shell
+    action: ask
+    severity: medium
+    message: "Shell command requires confirmation in hardened mode"

@@ -18,6 +18,9 @@ from skillsecurity.models.tool_call import ToolCall, ToolType
 from skillsecurity.selfprotect.guard import SelfProtectionGuard
 
 if TYPE_CHECKING:
+    from skillsecurity.engine.command_semantics import CommandSemanticsGuard
+    from skillsecurity.engine.context_policy import ContextPolicyGuard
+    from skillsecurity.engine.path_boundary import PathBoundaryGuard
     from skillsecurity.manifest.permissions import SkillManifest
     from skillsecurity.privacy.outbound import OutboundInspector
 
@@ -35,6 +38,9 @@ class Interceptor:
         audit_logger: AuditLogger | None = None,
         outbound_inspector: OutboundInspector | None = None,
         chain_tracker: ChainTracker | None = None,
+        path_boundary_guard: PathBoundaryGuard | None = None,
+        command_semantics_guard: CommandSemanticsGuard | None = None,
+        context_policy_guard: ContextPolicyGuard | None = None,
     ) -> None:
         self._policy = policy_engine
         self._decision = decision_engine
@@ -42,6 +48,9 @@ class Interceptor:
         self._audit_logger = audit_logger
         self._outbound_inspector = outbound_inspector
         self._chain_tracker = chain_tracker
+        self._path_boundary_guard = path_boundary_guard
+        self._command_semantics_guard = command_semantics_guard
+        self._context_policy_guard = context_policy_guard
         self._skill_manifests: dict[str, SkillManifest] = {}
 
     def register_skill(self, skill_id: str, manifest: SkillManifest) -> None:
@@ -60,9 +69,27 @@ class Interceptor:
                 self._log_check(tool_call, final)
                 return final
 
+            context_decision = self._check_context_policy(tool_call)
+            if context_decision is not None:
+                final = self._finalize(context_decision, start)
+                self._log_check(tool_call, final)
+                return final
+
             perm_decision = self._check_skill_permission(tool_call)
             if perm_decision is not None:
                 final = self._finalize(perm_decision, start)
+                self._log_check(tool_call, final)
+                return final
+
+            sem_decision = self._check_command_semantics(tool_call)
+            if sem_decision is not None:
+                final = self._finalize(sem_decision, start)
+                self._log_check(tool_call, final)
+                return final
+
+            path_boundary_decision = self._check_path_boundary(tool_call)
+            if path_boundary_decision is not None:
+                final = self._finalize(path_boundary_decision, start)
                 self._log_check(tool_call, final)
                 return final
 
@@ -141,6 +168,21 @@ class Interceptor:
                 ],
             )
         return None
+
+    def _check_path_boundary(self, tool_call: ToolCall) -> Decision | None:
+        if self._path_boundary_guard is None:
+            return None
+        return self._path_boundary_guard.check(tool_call)
+
+    def _check_command_semantics(self, tool_call: ToolCall) -> Decision | None:
+        if self._command_semantics_guard is None:
+            return None
+        return self._command_semantics_guard.check(tool_call)
+
+    def _check_context_policy(self, tool_call: ToolCall) -> Decision | None:
+        if self._context_policy_guard is None:
+            return None
+        return self._context_policy_guard.check(tool_call)
 
     def _check_privacy(self, tool_call: ToolCall) -> Decision | None:
         """Run outbound data inspection for network requests, browser actions, and message sends."""
